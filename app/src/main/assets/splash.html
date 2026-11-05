@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Launch Splash</title>
+<style>
+/*
+  Split-screen app launch animation only.
+  1. Orange and black halves slide in from opposite edges.
+  2. The broadcast glyph pops in, the bars bounce like an equalizer, a ring pulses outward.
+  3. The glyph enlarges until it fills the screen.
+  4. The two halves slide apart and your app (#app) is underneath.
+
+  Everything is driven by one function, render(t), so it plays live and can also
+  be scrubbed frame by frame. Every phase is a plain start/end time in TIMELINE.
+*/
+:root {
+  --orange: #ff5100;
+  --orange-hi: #ff7a2e;
+  --orange-lo: #e03d00;
+  --ink: #080808;
+  --paper: #fbf6f2;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: var(--ink); }
+
+#stage { position: fixed; inset: 0; overflow: hidden; }
+
+/* Your real app goes here. */
+#app { position: absolute; inset: 0; background: var(--paper); transform-origin: 50% 50%; will-change: transform; }
+
+.half { position: absolute; top: 0; bottom: 0; width: 50%; overflow: hidden; will-change: transform; z-index: 5; }
+.half.l { left: 0; background: linear-gradient(160deg, var(--orange-hi) 0%, var(--orange) 55%, var(--orange-lo) 100%); --glyph: #ffffff; --ring: #ffffff; }
+.half.r { right: 0; background: var(--ink); --glyph: var(--orange); --ring: var(--orange); }
+/* each half holds a full-screen layer, so the glyph lines up across the split */
+.half .in { position: absolute; top: 0; height: 100%; width: 200%; }
+.half.l .in { left: 0; }
+.half.r .in { left: -100%; }
+.gw { position: absolute; left: 50%; top: 46%; width: min(62vw, 260px); aspect-ratio: 1; transform: translate(-50%, -50%); opacity: 0; will-change: transform; }
+.gw svg { display: block; width: 100%; height: 100%; overflow: visible; }
+
+/* Dev helper: remove in your app */
+#replay { position: fixed; top: max(10px, env(safe-area-inset-top)); right: 12px; z-index: 20; display: none; border: 0; border-radius: 999px; padding: 8px 14px; font: 700 12px system-ui, sans-serif; background: var(--ink); color: #fff; cursor: pointer; }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <g id="glyph">
+      <g fill="none" stroke="var(--ring)" stroke-width="10">
+        <circle cx="512" cy="273" r="150" stroke-opacity="0.34"/>
+        <circle cx="512" cy="273" r="245" stroke-opacity="0.24"/>
+        <circle cx="512" cy="273" r="350" stroke-opacity="0.15"/>
+        <circle id="wave" cx="512" cy="273" r="61" stroke-opacity="0"/>
+      </g>
+      <g fill="var(--glyph)">
+        <circle cx="512" cy="273" r="61"/>
+        <rect id="bar0" x="266" y="451" width="100" height="257" rx="50"/>
+        <rect id="bar1" x="462" y="395" width="100" height="369" rx="50"/>
+        <rect id="bar2" x="658" y="507" width="100" height="190" rx="50"/>
+      </g>
+    </g>
+  </defs>
+</svg>
+
+<div id="stage">
+  <main id="app"></main>
+
+  <div class="half l"><div class="in"><div class="gw"><svg viewBox="0 0 1024 1024" aria-hidden="true"><use href="#glyph"/></svg></div></div></div>
+  <div class="half r"><div class="in"><div class="gw"><svg viewBox="0 0 1024 1024" aria-hidden="true"><use href="#glyph"/></svg></div></div></div>
+
+  <button id="replay" type="button">Replay</button>
+</div>
+
+<script>
+(function () {
+  /* ---------- Timeline (seconds). Change these to retime the launch. ---------- */
+  var TIMELINE = {
+    slideIn:  [0.00, 0.70],   // halves enter from opposite edges
+    popIn:    [0.50, 1.10],   // glyph appears
+    bounce:   [0.90, 1.20],   // equalizer starts
+    enlarge:  [1.90, 2.70],   // glyph grows to fill the screen
+    fadeGlyph:[2.45, 2.75],
+    open:     [2.70, 3.60],   // halves slide apart, app is revealed
+    total: 3.8
+  };
+  var MAX_ZOOM = 28;
+
+  function clamp(v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
+  function prog(t, r) { return clamp((t - r[0]) / (r[1] - r[0])); }
+  function easeOutCubic(p) { return 1 - Math.pow(1 - p, 3); }
+  function easeInQuart(p) { return p * p * p * p; }
+  function easeInOutCubic(p) { return p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2; }
+  function easeOutBack(p) { var c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(p - 1, 3) + c1 * Math.pow(p - 1, 2); }
+
+  var L = document.querySelector('.half.l'), R = document.querySelector('.half.r');
+  var gws = document.querySelectorAll('.gw');
+  var app = document.getElementById('app');
+  var wave = document.getElementById('wave');
+  var bars = [
+    { el: document.getElementById('bar0'), cx: 316, cy: 579.5 },
+    { el: document.getElementById('bar1'), cx: 512, cy: 579.5 },
+    { el: document.getElementById('bar2'), cx: 708, cy: 602 }
+  ];
+  var TAU = Math.PI * 2;
+
+  function render(t) {
+    // halves slide in, then apart
+    var enter = easeOutCubic(prog(t, TIMELINE.slideIn));
+    var open = easeInOutCubic(prog(t, TIMELINE.open));
+    L.style.transform = 'translate(' + (-open * 100) + '%,' + ((1 - enter) * 100) + '%)';
+    R.style.transform = 'translate(' + (open * 100) + '%,' + (-(1 - enter) * 100) + '%)';
+    L.style.visibility = R.style.visibility = open >= 1 ? 'hidden' : 'visible';
+
+    // glyph pop, enlarge, fade
+    var pop = prog(t, TIMELINE.popIn);
+    var zoom = 1 + MAX_ZOOM * easeInQuart(prog(t, TIMELINE.enlarge));
+    var scale = (0.6 + 0.4 * easeOutBack(pop)) * zoom;
+    var opacity = clamp(pop * 1.6) * (1 - prog(t, TIMELINE.fadeGlyph));
+    for (var g = 0; g < gws.length; g++) {
+      gws[g].style.transform = 'translate(-50%,-50%) scale(' + scale + ')';
+      gws[g].style.opacity = opacity;
+    }
+
+    // equalizer bars and outward ring
+    var amp = 0.24 * prog(t, TIMELINE.bounce);
+    for (var i = 0; i < bars.length; i++) {
+      var b = bars[i];
+      var k = 1 + amp * (Math.sin(TAU * (1.5 * t + i * 0.33)) + 0.4 * Math.sin(TAU * (3 * t + i * 0.2)));
+      b.el.setAttribute('transform', 'translate(' + b.cx + ' ' + b.cy + ') scale(1 ' + k.toFixed(4) + ') translate(' + (-b.cx) + ' ' + (-b.cy) + ')');
+    }
+    if (t > TIMELINE.bounce[0]) {
+      var ph = ((t - TIMELINE.bounce[0]) * 0.9) % 1;
+      wave.setAttribute('r', (61 + ph * 460).toFixed(1));
+      wave.setAttribute('stroke-opacity', (0.5 * (1 - ph) * prog(t, TIMELINE.bounce)).toFixed(3));
+    } else {
+      wave.setAttribute('stroke-opacity', 0);
+    }
+
+    // app settles in as the halves open
+    app.style.visibility = open > 0 ? 'visible' : 'hidden';
+    app.style.transform = 'scale(' + (1.07 - 0.07 * open) + ')';
+  }
+
+  /* ---------- Playback ---------- */
+  var replayBtn = document.getElementById('replay');
+  var raf = 0;
+  function play() {
+    cancelAnimationFrame(raf);
+    replayBtn.style.display = 'none';
+    var t0 = performance.now();
+    (function tick(now) {
+      var t = (now - t0) / 1000;
+      if (t >= TIMELINE.total) { render(TIMELINE.total); if (window.AndroidBridge) window.AndroidBridge.onSplashComplete(); return; }
+      render(t);
+      raf = requestAnimationFrame(tick);
+    })(t0);
+  }
+  replayBtn.addEventListener('click', play);
+
+  // Used by the video renderer: #capture shows a single frame at any time.
+  window.__seek = function (t) { cancelAnimationFrame(raf); replayBtn.style.display = 'none'; render(t); };
+  window.__total = TIMELINE.total;
+
+  render(0);
+  if (location.hash !== '#capture') play();
+})();
+</script>
+</body>
+</html>
