@@ -46,15 +46,16 @@ public class MainActivity extends Activity {
 
     public class MediaBridge {
         @JavascriptInterface
-        public void updateMetadata(String title, String artist, String album, String artworkUrl) {
+        public void updateMetadata(String title, String artist, String album, String artworkUrl, boolean isPlaying) {
             handler.post(() -> {
+                checkAndRequestNotificationPermission();
                 Intent intent = new Intent(MainActivity.this, MusicPlaybackService.class);
                 intent.setAction(MusicPlaybackService.ACTION_UPDATE_METADATA);
                 intent.putExtra(MusicPlaybackService.EXTRA_TITLE, title);
                 intent.putExtra(MusicPlaybackService.EXTRA_ARTIST, artist);
                 intent.putExtra(MusicPlaybackService.EXTRA_ALBUM, album);
                 intent.putExtra(MusicPlaybackService.EXTRA_ARTWORK_URL, artworkUrl);
-                intent.putExtra(MusicPlaybackService.EXTRA_IS_PLAYING, true);
+                intent.putExtra(MusicPlaybackService.EXTRA_IS_PLAYING, isPlaying);
                 startPlaybackService(intent);
             });
         }
@@ -62,6 +63,7 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void updatePlaybackState(boolean isPlaying) {
             handler.post(() -> {
+                checkAndRequestNotificationPermission();
                 Intent intent = new Intent(MainActivity.this, MusicPlaybackService.class);
                 intent.setAction(MusicPlaybackService.ACTION_UPDATE_STATE);
                 intent.putExtra(MusicPlaybackService.EXTRA_IS_PLAYING, isPlaying);
@@ -94,7 +96,11 @@ public class MainActivity extends Activity {
             } else {
                 startService(intent);
             }
-        } catch (Exception ignored) {}
+        } catch (Exception e) {
+            try {
+                startService(intent);
+            } catch (Exception ignored) {}
+        }
     }
 
     private void triggerMediaAction(String action) {
@@ -128,7 +134,7 @@ public class MainActivity extends Activity {
         Button retry = findViewById(R.id.btn_retry);
         retry.setOnClickListener(v -> reloadApp());
 
-        // Ask for notification permission on app open (Android 13+)
+        // Ask for notification permission on app open
         checkAndRequestNotificationPermission();
 
         // Register media action receiver for notification buttons
@@ -228,67 +234,95 @@ public class MainActivity extends Activity {
         String js = "(function() {"
             + "if (window.__instaMusicMediaHooked) return;"
             + "window.__instaMusicMediaHooked = true;"
+            + "var lastTitle = ''; var lastArtist = ''; var lastArt = ''; var lastPlaying = null;"
+            + "function reportMeta(title, artist, album, art, isPlaying) {"
+            + "  if (!title && !artist) return;"
+            + "  if (window.MediaBridge && window.MediaBridge.updateMetadata) {"
+            + "    try { window.MediaBridge.updateMetadata(title || 'INSTA MUSIC', artist || 'Streaming', album || 'INSTA MUSIC', art || '', isPlaying !== false); } catch(e){}"
+            + "  }"
+            + "}"
+            + "function reportState(playing) {"
+            + "  if (lastPlaying === playing) return;"
+            + "  lastPlaying = playing;"
+            + "  if (window.MediaBridge && window.MediaBridge.updatePlaybackState) {"
+            + "    try { window.MediaBridge.updatePlaybackState(playing); } catch(e){}"
+            + "  }"
+            + "}"
+            + "var OrigAudio = window.Audio;"
+            + "if (OrigAudio) {"
+            + "  window.Audio = function(src) {"
+            + "    var a = new OrigAudio(src);"
+            + "    attachAudio(a);"
+            + "    return a;"
+            + "  };"
+            + "  window.Audio.prototype = OrigAudio.prototype;"
+            + "}"
+            + "if (window.HTMLAudioElement && window.HTMLAudioElement.prototype) {"
+            + "  var origPlay = window.HTMLAudioElement.prototype.play;"
+            + "  window.HTMLAudioElement.prototype.play = function() {"
+            + "    attachAudio(this);"
+            + "    reportState(true);"
+            + "    return origPlay.apply(this, arguments);"
+            + "  };"
+            + "  var origPause = window.HTMLAudioElement.prototype.pause;"
+            + "  window.HTMLAudioElement.prototype.pause = function() {"
+            + "    attachAudio(this);"
+            + "    reportState(false);"
+            + "    return origPause.apply(this, arguments);"
+            + "  };"
+            + "}"
+            + "function attachAudio(a) {"
+            + "  if (!a || a.__instaHooked) return;"
+            + "  a.__instaHooked = true;"
+            + "  a.addEventListener('play', function() { reportState(true); });"
+            + "  a.addEventListener('playing', function() { reportState(true); });"
+            + "  a.addEventListener('pause', function() { reportState(false); });"
+            + "  a.addEventListener('ended', function() { reportState(false); });"
+            + "}"
             + "var actions = {};"
             + "if (navigator.mediaSession) {"
-            + "  var origSet = navigator.mediaSession.setActionHandler.bind(navigator.mediaSession);"
+            + "  var origSetAction = navigator.mediaSession.setActionHandler.bind(navigator.mediaSession);"
             + "  navigator.mediaSession.setActionHandler = function(action, handler) {"
             + "    actions[action] = handler;"
-            + "    return origSet(action, handler);"
+            + "    try { return origSetAction(action, handler); } catch(e){}"
             + "  };"
-            + "  var curMeta = null;"
-            + "  try {"
-            + "    Object.defineProperty(navigator.mediaSession, 'metadata', {"
-            + "      get: function() { return curMeta; },"
-            + "      set: function(meta) {"
-            + "        curMeta = meta;"
-            + "        try {"
-            + "          var art = '';"
-            + "          if (meta && meta.artwork && meta.artwork.length > 0) {"
-            + "            art = meta.artwork[meta.artwork.length - 1].src || '';"
-            + "          }"
-            + "          if (window.MediaBridge && window.MediaBridge.updateMetadata) {"
-            + "            window.MediaBridge.updateMetadata("
-            + "              meta ? (meta.title || '') : '',"
-            + "              meta ? (meta.artist || '') : '',"
-            + "              meta ? (meta.album || '') : '',"
-            + "              art"
-            + "            );"
-            + "          }"
-            + "        } catch(e) {}"
-            + "      },"
-            + "      configurable: true"
-            + "    });"
-            + "  } catch(e) {}"
             + "}"
             + "window.__triggerMediaAction = function(act) {"
-            + "  if (actions[act]) { actions[act](); return; }"
-            + "  var a = document.querySelector('audio');"
-            + "  if (a) {"
-            + "    if (act === 'play') a.play();"
-            + "    else if (act === 'pause') a.pause();"
+            + "  if (actions[act]) { try { actions[act](); return; } catch(e){} }"
+            + "  var audios = document.getElementsByTagName('audio');"
+            + "  for (var i = 0; i < audios.length; i++) {"
+            + "    try { if (act === 'play') audios[i].play(); else if (act === 'pause') audios[i].pause(); } catch(e){}"
             + "  }"
             + "};"
-            + "function hookAudio(a) {"
-            + "  if (!a || a.__hooked) return;"
-            + "  a.__hooked = true;"
-            + "  a.addEventListener('play', function() {"
-            + "    if (window.MediaBridge) window.MediaBridge.updatePlaybackState(true);"
-            + "  });"
-            + "  a.addEventListener('pause', function() {"
-            + "    if (window.MediaBridge) window.MediaBridge.updatePlaybackState(false);"
-            + "  });"
+            + "function getArt(meta) {"
+            + "  if (!meta || !meta.artwork || !meta.artwork.length) return '';"
+            + "  var item = meta.artwork[meta.artwork.length - 1];"
+            + "  return (item && item.src) ? item.src : '';"
             + "}"
-            + "document.querySelectorAll('audio').forEach(hookAudio);"
-            + "var obs = new MutationObserver(function(muts) {"
-            + "  muts.forEach(function(m) {"
-            + "    m.addedNodes.forEach(function(n) {"
-            + "      if (n.tagName === 'AUDIO') hookAudio(n);"
-            + "      else if (n.querySelectorAll) n.querySelectorAll('audio').forEach(hookAudio);"
-            + "    });"
-            + "  });"
-            + "});"
-            + "obs.observe(document.documentElement, { childList: true, subtree: true });"
-            + "})();";
+            + "function syncMediaSession() {"
+            + "  if (!navigator.mediaSession) return;"
+            + "  var meta = navigator.mediaSession.metadata;"
+            + "  var isPlaying = navigator.mediaSession.playbackState === 'playing';"
+            + "  if (meta) {"
+            + "    var t = meta.title || ''; var ar = meta.artist || ''; var al = meta.album || 'INSTA MUSIC'; var img = getArt(meta);"
+            + "    if (t !== lastTitle || ar !== lastArtist || img !== lastArt) {"
+            + "      lastTitle = t; lastArtist = ar; lastArt = img;"
+            + "      reportMeta(t, ar, al, img, isPlaying);"
+            + "    }"
+            + "  }"
+            + "  if (navigator.mediaSession.playbackState) {"
+            + "    reportState(isPlaying);"
+            + "  }"
+            + "}"
+            + "setInterval(function() {"
+            + "  try {"
+            + "    syncMediaSession();"
+            + "    var audios = document.getElementsByTagName('audio');"
+            + "    for (var i = 0; i < audios.length; i++) { attachAudio(audios[i]); }"
+            + "  } catch(e){}"
+            + "}, 350);"
+            + "syncMediaSession();"
+            + "})()";
         view.evaluateJavascript(js, null);
     }
 
