@@ -46,6 +46,14 @@
   if (window.__instaMusicMediaHooked) return;
   window.__instaMusicMediaHooked = true;
 
+  // Hide Lovable badge inside Android app
+  try {
+    var style = document.createElement('style');
+    style.id = '__hide_lovable_badge';
+    style.textContent = '#lovable-badge { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }';
+    (document.head || document.documentElement).appendChild(style);
+  } catch(e) {}
+
   var lastTitle = '', lastArtist = '', lastAlbum = '', lastArt = '', lastIdentity = '';
   var lastPlaying = null, lastPositionSecond = -1, lastDurationSecond = -1;
   var syncTimer = 0;
