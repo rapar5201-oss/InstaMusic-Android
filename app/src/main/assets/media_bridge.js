@@ -46,23 +46,35 @@
   if (window.__instaMusicMediaHooked) return;
   window.__instaMusicMediaHooked = true;
 
-  var lastTitle = '', lastArtist = '', lastAlbum = '', lastArt = '';
+  var lastTitle = '', lastArtist = '', lastAlbum = '', lastArt = '', lastIdentity = '';
   var lastPlaying = null, lastPositionSecond = -1, lastDurationSecond = -1;
+  var syncTimer = 0;
   var audioElements = new Set();
 
   function bridge() { return window.MediaBridge || null; }
 
-  function reportMeta(title, artist, album, art, playing) {
+  function reportMeta(title, artist, album, art, playing, identity, force) {
     var b = bridge();
     if (!b || !b.updateMetadata) return;
     var t = (title || '').trim();
     var ar = (artist || '').trim();
-    if (!t && !ar) return;
-    if (t === lastTitle && ar === lastArtist && album === lastAlbum && art === lastArt) return;
-    lastTitle = t; lastArtist = ar; lastAlbum = album; lastArt = art;
+    var al = (album || '').trim() || 'INSTA MUSIC';
+    var image = (art || '').trim();
+    var id = identity || '';
+    var changed = t !== lastTitle || ar !== lastArtist || al !== lastAlbum || image !== lastArt || id !== lastIdentity;
+    if (!changed && !force) return;
+    lastTitle = t; lastArtist = ar; lastAlbum = al; lastArt = image; lastIdentity = id;
     try {
-      b.updateMetadata(t || 'INSTA MUSIC', ar || 'Streaming', album || 'INSTA MUSIC', art || '', !!playing);
+      b.updateMetadata(t || 'INSTA MUSIC', ar || 'Streaming', al, image, !!playing);
     } catch(e) {}
+  }
+
+  function scheduleSync() {
+    if (syncTimer) return;
+    syncTimer = window.setTimeout(function() {
+      syncTimer = 0;
+      try { sync(); } catch(e) {}
+    }, 80);
   }
 
   function reportInfo(audio, force) {
@@ -174,14 +186,15 @@
       if (!song && audio && audio.src) {
         song = songs.find(function(it){ return it && (it.src === audio.src || it.src === audio.currentSrc); });
       }
-      if (!song) return null;
+      if (!song) return currentId ? { id: String(currentId), title: '', artist: '', cover: '', album: 'INSTA MUSIC' } : null;
       var artistObj = artists.find(function(it){ return it && it.id === song.artistId; });
       var artistName = artistObj ? artistObj.name : '';
       return {
+        id: String(song.id || currentId || ''),
         title: song.title || '',
-        artist: artistName || '',
-        cover: song.cover || '',
-        album: 'INSTA MUSIC'
+        artist: artistName || song.artist || '',
+        cover: song.cover || song.artwork || '',
+        album: song.album || 'INSTA MUSIC'
       };
     } catch(e) {
       return null;
@@ -251,7 +264,7 @@
       if (navigator.mediaSession && navigator.mediaSession.metadata) {
         var m = navigator.mediaSession.metadata;
         if (m && m.title && m.title !== 'INSTA MUSIC') {
-          meta = { title: m.title, artist: m.artist || '', album: m.album || 'INSTA MUSIC', cover: getArt(m) };
+          meta = { id: '', title: m.title, artist: m.artist || '', album: m.album || 'INSTA MUSIC', cover: getArt(m) };
         }
       }
     }
@@ -265,14 +278,43 @@
     }
 
     if (meta && meta.title && meta.title.trim()) {
-      reportMeta(meta.title, meta.artist, meta.album || 'INSTA MUSIC', meta.cover || '', playing);
+      reportMeta(meta.title, meta.artist, meta.album || 'INSTA MUSIC', meta.cover || '', playing, meta.id || '');
+    } else if (meta && meta.id && meta.id !== lastIdentity) {
+      // A new track is selected but its metadata hasn't hydrated yet. Clear old text/art
+      // immediately rather than displaying the previous track during SPA transitions.
+      reportMeta('', '', 'INSTA MUSIC', '', playing, meta.id, true);
     }
 
     if (active) reportInfo(active, false);
   }
 
+  // SPA route changes do not reload the WebView. Observe both history changes and
+  // DOM mutations, while the polling pass catches same-document storage updates.
+  try {
+    ['pushState', 'replaceState'].forEach(function(name) {
+      var original = history[name];
+      if (typeof original !== 'function' || original.__instaWrapped) return;
+      var wrapped = function() {
+        var result = original.apply(this, arguments);
+        scheduleSync();
+        return result;
+      };
+      wrapped.__instaWrapped = true;
+      history[name] = wrapped;
+    });
+    window.addEventListener('popstate', scheduleSync);
+    window.addEventListener('hashchange', scheduleSync);
+    window.addEventListener('pageshow', scheduleSync);
+    window.addEventListener('focus', scheduleSync);
+    document.addEventListener('visibilitychange', scheduleSync);
+    if (window.MutationObserver && document.documentElement) {
+      var observer = new MutationObserver(scheduleSync);
+      observer.observe(document.documentElement, {subtree:true, childList:true, characterData:true, attributes:true, attributeFilter:['src','data-id','aria-label']});
+    }
+  } catch(e) {}
+
   sync();
   setInterval(function() {
     try { sync(); } catch(e) {}
-  }, 500);
+  }, 400);
 })();
