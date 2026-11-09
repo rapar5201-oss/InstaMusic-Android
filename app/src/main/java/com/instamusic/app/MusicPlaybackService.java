@@ -31,6 +31,7 @@ public class MusicPlaybackService extends Service {
 
     public static final String ACTION_UPDATE_METADATA = "com.instamusic.app.UPDATE_METADATA";
     public static final String ACTION_UPDATE_STATE = "com.instamusic.app.UPDATE_STATE";
+    public static final String ACTION_UPDATE_POSITION = "com.instamusic.app.UPDATE_POSITION";
     public static final String ACTION_STOP = "com.instamusic.app.STOP";
 
     public static final String ACTION_PLAY = "com.instamusic.app.PLAY";
@@ -43,6 +44,8 @@ public class MusicPlaybackService extends Service {
     public static final String EXTRA_ALBUM = "album";
     public static final String EXTRA_ARTWORK_URL = "artwork_url";
     public static final String EXTRA_IS_PLAYING = "is_playing";
+    public static final String EXTRA_POSITION_MS = "position_ms";
+    public static final String EXTRA_DURATION_MS = "duration_ms";
 
     private static final int MAX_CACHE_ENTRIES = 30;
     private final LruCache<String, Bitmap> artworkCache = new LruCache<String, Bitmap>(MAX_CACHE_ENTRIES) {
@@ -60,6 +63,9 @@ public class MusicPlaybackService extends Service {
     private Bitmap currentArtwork = null;
     private Bitmap fallbackArtwork = null;
     private boolean isPlaying = false;
+    private long currentPositionMs = 0L;
+    private long currentDurationMs = 0L;
+    private long lastPositionUpdateMs = 0L;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     @Override
@@ -189,6 +195,8 @@ public class MusicPlaybackService extends Service {
             if (newArtUrl != null && !newArtUrl.trim().isEmpty()) {
                 if (!newArtUrl.equals(currentArtworkUrl)) {
                     currentArtworkUrl = newArtUrl;
+                    // Switch to fallback immediately so the previous track's art never lingers.
+                    currentArtwork = fallbackArtwork;
                     loadArtworkWithCache(currentArtworkUrl);
                 }
             } else {
@@ -198,6 +206,13 @@ public class MusicPlaybackService extends Service {
             updateNotification();
         } else if (ACTION_UPDATE_STATE.equals(action)) {
             isPlaying = intent.getBooleanExtra(EXTRA_IS_PLAYING, false);
+            lastPositionUpdateMs = android.os.SystemClock.elapsedRealtime();
+            updateNotification();
+        } else if (ACTION_UPDATE_POSITION.equals(action)) {
+            currentPositionMs = Math.max(0L, intent.getLongExtra(EXTRA_POSITION_MS, currentPositionMs));
+            currentDurationMs = Math.max(0L, intent.getLongExtra(EXTRA_DURATION_MS, currentDurationMs));
+            isPlaying = intent.getBooleanExtra(EXTRA_IS_PLAYING, isPlaying);
+            lastPositionUpdateMs = android.os.SystemClock.elapsedRealtime();
             updateNotification();
         } else if (ACTION_STOP.equals(action)) {
             stopForeground(true);
@@ -236,7 +251,6 @@ public class MusicPlaybackService extends Service {
 
         if (currentArtwork == null) {
             currentArtwork = fallbackArtwork;
-            updateNotification();
         }
 
         final String requestedUrl = urlStr;
@@ -285,9 +299,14 @@ public class MusicPlaybackService extends Service {
                 | PlaybackState.ACTION_STOP;
 
             int state = isPlaying ? PlaybackState.STATE_PLAYING : PlaybackState.STATE_PAUSED;
+            long position = currentPositionMs;
+            if (isPlaying && lastPositionUpdateMs > 0L) {
+                position += Math.max(0L, android.os.SystemClock.elapsedRealtime() - lastPositionUpdateMs);
+            }
+            if (currentDurationMs > 0L) position = Math.min(position, currentDurationMs);
             PlaybackState.Builder stateBuilder = new PlaybackState.Builder()
                 .setActions(actions)
-                .setState(state, PlaybackState.PLAYBACK_POSITION_UNKNOWN, 1.0f);
+                .setState(state, position, isPlaying ? 1.0f : 0.0f);
             mediaSession.setPlaybackState(stateBuilder.build());
 
             Bitmap artToUse = currentArtwork != null ? currentArtwork : fallbackArtwork;
@@ -295,6 +314,9 @@ public class MusicPlaybackService extends Service {
                 .putString(MediaMetadata.METADATA_KEY_TITLE, currentTitle)
                 .putString(MediaMetadata.METADATA_KEY_ARTIST, currentArtist)
                 .putString(MediaMetadata.METADATA_KEY_ALBUM, currentAlbum);
+            if (currentDurationMs > 0L) {
+                metaBuilder.putLong(MediaMetadata.METADATA_KEY_DURATION, currentDurationMs);
+            }
             if (artToUse != null) {
                 metaBuilder.putBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART, artToUse);
                 metaBuilder.putBitmap(MediaMetadata.METADATA_KEY_ART, artToUse);
@@ -336,7 +358,7 @@ public class MusicPlaybackService extends Service {
         Bitmap art = currentArtwork != null ? currentArtwork : fallbackArtwork;
 
         nb.setContentTitle(currentTitle)
-          .setContentText(currentArtist)
+          .setContentText(currentArtist + "  •  " + formatTime(currentPositionMs) + " / " + formatTime(currentDurationMs))
           .setSubText(currentAlbum)
           .setSmallIcon(R.drawable.ic_music_note)
           .setContentIntent(pOpenApp)
@@ -360,6 +382,13 @@ public class MusicPlaybackService extends Service {
         nb.setStyle(style);
 
         return nb.build();
+    }
+
+    private String formatTime(long millis) {
+        long totalSeconds = Math.max(0L, millis) / 1000L;
+        long minutes = totalSeconds / 60L;
+        long seconds = totalSeconds % 60L;
+        return String.format(java.util.Locale.ROOT, "%02d:%02d", minutes, seconds);
     }
 
     private void updateNotification() {
