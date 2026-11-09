@@ -258,16 +258,35 @@ public class MusicPlaybackService extends Service {
             HttpURLConnection conn = null;
             InputStream is = null;
             try {
-                URL url = new URL(requestedUrl);
-                conn = (HttpURLConnection) url.openConnection();
-                conn.setRequestProperty("User-Agent", "InstaMusic/1.0 (Android)");
-                conn.setConnectTimeout(6000);
-                conn.setReadTimeout(6000);
-                conn.setDoInput(true);
-                conn.connect();
-                is = conn.getInputStream();
-                Bitmap bmp = BitmapFactory.decodeStream(is);
+                Bitmap bmp = null;
+                if (requestedUrl.startsWith("data:image/")) {
+                    int comma = requestedUrl.indexOf(',');
+                    if (comma != -1) {
+                        byte[] bytes = android.util.Base64.decode(requestedUrl.substring(comma + 1), android.util.Base64.DEFAULT);
+                        bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+                    }
+                } else {
+                    URL url = new URL(requestedUrl);
+                    conn = (HttpURLConnection) url.openConnection();
+                    conn.setRequestProperty("User-Agent", "InstaMusic/1.0 (Android)");
+                    conn.setInstanceFollowRedirects(true);
+                    conn.setConnectTimeout(6000);
+                    conn.setReadTimeout(6000);
+                    conn.setDoInput(true);
+                    conn.connect();
+                    is = conn.getInputStream();
+                    bmp = BitmapFactory.decodeStream(is);
+                }
                 if (bmp != null) {
+                    int maxDim = 512;
+                    int w = bmp.getWidth();
+                    int h = bmp.getHeight();
+                    if (w > maxDim || h > maxDim) {
+                        float ratio = Math.min((float) maxDim / w, (float) maxDim / h);
+                        int targetW = Math.max(1, Math.round(w * ratio));
+                        int targetH = Math.max(1, Math.round(h * ratio));
+                        bmp = Bitmap.createScaledBitmap(bmp, targetW, targetH, true);
+                    }
                     artworkCache.put(requestedUrl, bmp);
                     if (requestedUrl.equals(currentArtworkUrl)) {
                         currentArtwork = bmp;
