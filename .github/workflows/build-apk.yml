@@ -38,7 +38,7 @@ jobs:
             "versionCode": ${{ github.run_number }},
             "versionName": "1.0.${{ github.run_number }}",
             "apkUrl": "https://github.com/rapar5201-oss/InstaMusic-Android/releases/download/latest-apk/app-release.apk",
-            "releaseNotes": "In-app update download progress indicator, real-time status messages, and notification tracking."
+            "releaseNotes": "Full offline support: Home and Library saved music work seamlessly offline with local app shell caching, plus in-app updates."
           }
           EOF
 
@@ -56,7 +56,7 @@ jobs:
         with:
           tag_name: latest-apk
           name: InstaMusic latest APK (v1.0.${{ github.run_number }})
-          body: "Installable InstaMusic Android app. Loads live site at https://instamusic.lovable.app with watermark hidden, notification media playback, and in-app APK updates with visual progress indicator."
+          body: "Installable InstaMusic Android app with full offline support. Home and Library saved music work seamlessly offline with local app shell caching, plus in-app APK updates with visual progress indicator."
           files: |
             app/build/outputs/apk/release/app-release.apk
             app/build/outputs/apk/debug/app-debug.apk

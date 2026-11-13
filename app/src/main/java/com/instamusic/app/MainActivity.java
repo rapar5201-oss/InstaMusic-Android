@@ -21,6 +21,7 @@ import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -88,6 +89,16 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void checkForUpdates() {
             handler.post(() -> UpdateManager.checkForUpdates(MainActivity.this, true));
+        }
+
+        @JavascriptInterface
+        public void showToast(String message) {
+            handler.post(() -> Toast.makeText(MainActivity.this, message, Toast.LENGTH_SHORT).show());
+        }
+
+        @JavascriptInterface
+        public boolean isOnline() {
+            return OfflineCacheManager.isNetworkAvailable(MainActivity.this);
         }
     }
 
@@ -258,6 +269,13 @@ public class MainActivity extends Activity {
 
         appView.setWebViewClient(new WebViewClient() {
             @Override
+            public WebResourceResponse shouldInterceptRequest(WebView v, WebResourceRequest req) {
+                WebResourceResponse resp = OfflineCacheManager.shouldIntercept(MainActivity.this, req);
+                if (resp != null) return resp;
+                return super.shouldInterceptRequest(v, req);
+            }
+
+            @Override
             public void onPageStarted(WebView v, String url, Bitmap icon) {
                 errorLayout.setVisibility(View.GONE);
                 injectMediaBridgeScript(v);
@@ -274,6 +292,14 @@ public class MainActivity extends Activity {
             @Override
             public void onReceivedError(WebView v, WebResourceRequest req, WebResourceError err) {
                 if (req.isForMainFrame()) {
+                    if (!OfflineCacheManager.isNetworkAvailable(MainActivity.this) && OfflineCacheManager.hasCachedShell(MainActivity.this)) {
+                        v.post(() -> {
+                            errorLayout.setVisibility(View.GONE);
+                            appView.setVisibility(View.VISIBLE);
+                            revealWhenReady();
+                        });
+                        return;
+                    }
                     pageReady = true;
                     errorLayout.setVisibility(View.VISIBLE);
                     appView.setVisibility(View.GONE);

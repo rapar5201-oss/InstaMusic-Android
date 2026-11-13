@@ -1,0 +1,293 @@
+package com.instamusic.app;
+
+import android.content.Context;
+import android.content.res.AssetManager;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
+import android.net.NetworkInfo;
+import android.net.Uri;
+import android.os.Build;
+import android.util.Log;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
+
+import java.io.BufferedInputStream;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+public class OfflineCacheManager {
+    private static final String TAG = "OfflineCacheManager";
+    private static final String CACHE_DIR_NAME = "offline_web_cache";
+    private static final String ASSET_BASE_PATH = "offline_web";
+    private static final String TARGET_HOST = "instamusic.lovable.app";
+
+    private static final ExecutorService backgroundExecutor = Executors.newSingleThreadExecutor();
+    private static volatile boolean updateScheduled = false;
+
+    public static boolean isNetworkAvailable(Context context) {
+        if (context == null) return false;
+        try {
+            ConnectivityManager cm = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
+            if (cm == null) return false;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                Network active = cm.getActiveNetwork();
+                if (active == null) return false;
+                NetworkCapabilities cap = cm.getNetworkCapabilities(active);
+                return cap != null && (
+                    cap.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+                    cap.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ||
+                    cap.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
+                );
+            } else {
+                NetworkInfo info = cm.getActiveNetworkInfo();
+                return info != null && info.isConnected();
+            }
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    public static boolean hasCachedShell(Context context) {
+        if (context == null) return false;
+        // Check disk cache first
+        File diskHtml = new File(getCacheDir(context), "index.html");
+        if (diskHtml.exists() && diskHtml.length() > 0) return true;
+        // Check bundled assets
+        try (InputStream is = context.getAssets().open(ASSET_BASE_PATH + "/index.html")) {
+            return is != null;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    public static WebResourceResponse shouldIntercept(Context context, WebResourceRequest request) {
+        if (context == null || request == null || request.getUrl() == null) return null;
+        Uri uri = request.getUrl();
+        String scheme = uri.getScheme();
+        if (!"http".equalsIgnoreCase(scheme) && !"https".equalsIgnoreCase(scheme)) return null;
+
+        String host = uri.getHost();
+        if (host == null) return null;
+
+        boolean isTargetHost = host.equalsIgnoreCase(TARGET_HOST);
+        boolean online = isNetworkAvailable(context);
+
+        if (isTargetHost) {
+            String path = uri.getPath();
+            if (path == null || path.isEmpty()) path = "/";
+
+            boolean isHtmlRoute = path.equals("/") ||
+                                  path.equals("/library") ||
+                                  path.equals("/favorites") ||
+                                  path.equals("/search") ||
+                                  path.startsWith("/artist/") ||
+                                  path.startsWith("/song/") ||
+                                  path.startsWith("/playlist/") ||
+                                  (!path.contains(".") && !path.startsWith("/api/"));
+
+            if (isHtmlRoute) {
+                if (!online) {
+                    InputStream is = openCachedOrAsset(context, "index.html");
+                    if (is != null) {
+                        return createResponse("text/html", is);
+                    }
+                } else {
+                    // When online, trigger a background refresh of index.html so cache stays fresh
+                    refreshHtmlInBackground(context, uri.toString());
+                    return null;
+                }
+            }
+
+            // Static assets: /assets/*, /__l5e/*, /favicon.png
+            if (path.startsWith("/assets/") || path.startsWith("/__l5e/") || path.equals("/favicon.png")) {
+                String relativePath = path.startsWith("/") ? path.substring(1) : path;
+                String mimeType = guessMimeType(path);
+
+                if (!online) {
+                    InputStream is = openCachedOrAsset(context, relativePath);
+                    if (is != null) {
+                        return createResponse(mimeType, is);
+                    }
+                } else {
+                    // If it is a content-hashed asset and already in local cache/assets, serve directly
+                    if (isVersionedAsset(path)) {
+                        InputStream is = openCachedOrAsset(context, relativePath);
+                        if (is != null) {
+                            return createResponse(mimeType, is);
+                        }
+                    }
+                    // Fetch live and store in disk cache for future offline use
+                    return fetchAndCacheAsset(context, uri.toString(), relativePath, mimeType);
+                }
+            }
+        }
+
+        // Google Fonts handling when offline
+        if (!online && (host.contains("fonts.googleapis.com") || host.contains("fonts.gstatic.com"))) {
+            String lastSeg = uri.getLastPathSegment();
+            if (lastSeg != null) {
+                String fontRel = "fonts/" + lastSeg;
+                InputStream is = openCachedOrAsset(context, fontRel);
+                if (is != null) {
+                    String mime = lastSeg.endsWith(".woff2") ? "font/woff2" : "text/css";
+                    return createResponse(mime, is);
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static InputStream openCachedOrAsset(Context context, String relativePath) {
+        try {
+            File diskFile = new File(getCacheDir(context), relativePath);
+            if (diskFile.exists() && diskFile.length() > 0) {
+                return new FileInputStream(diskFile);
+            }
+        } catch (Exception ignored) {}
+
+        try {
+            AssetManager am = context.getAssets();
+            return am.open(ASSET_BASE_PATH + "/" + relativePath);
+        } catch (Exception ignored) {}
+
+        return null;
+    }
+
+    private static WebResourceResponse createResponse(String mimeType, InputStream is) {
+        Map<String, String> headers = new HashMap<>();
+        headers.put("Access-Control-Allow-Origin", "*");
+        headers.put("Cache-Control", "public, max-age=86400");
+        return new WebResourceResponse(mimeType, "UTF-8", 200, "OK", headers, is);
+    }
+
+    private static boolean isVersionedAsset(String path) {
+        if (path == null) return false;
+        return path.matches(".+-[a-zA-Z0-9_-]{6,}\\.[a-zA-Z0-9]+$") ||
+               path.matches(".+\\.[a-zA-Z0-9]{12,}\\.[a-zA-Z0-9]+$") ||
+               path.contains("/assets-v1/");
+    }
+
+    private static String guessMimeType(String path) {
+        if (path == null) return "application/octet-stream";
+        String lower = path.toLowerCase();
+        if (lower.endsWith(".html") || lower.endsWith(".htm")) return "text/html";
+        if (lower.endsWith(".js") || lower.endsWith(".mjs")) return "application/javascript";
+        if (lower.endsWith(".css")) return "text/css";
+        if (lower.endsWith(".png")) return "image/png";
+        if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
+        if (lower.endsWith(".svg")) return "image/svg+xml";
+        if (lower.endsWith(".ico")) return "image/x-icon";
+        if (lower.endsWith(".woff2")) return "font/woff2";
+        if (lower.endsWith(".woff")) return "font/woff";
+        if (lower.endsWith(".ttf")) return "font/ttf";
+        if (lower.endsWith(".json")) return "application/json";
+        return "application/octet-stream";
+    }
+
+    private static File getCacheDir(Context context) {
+        File dir = new File(context.getFilesDir(), CACHE_DIR_NAME);
+        if (!dir.exists()) dir.mkdirs();
+        return dir;
+    }
+
+    private static WebResourceResponse fetchAndCacheAsset(Context context, String urlStr, String relativePath, String mimeType) {
+        try {
+            URL url = new URL(urlStr);
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            conn.setConnectTimeout(8000);
+            conn.setReadTimeout(10000);
+            conn.connect();
+
+            int code = conn.getResponseCode();
+            if (code == 200) {
+                ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                try (InputStream in = new BufferedInputStream(conn.getInputStream())) {
+                    byte[] buf = new byte[8192];
+                    int len;
+                    while ((len = in.read(buf)) != -1) {
+                        bos.write(buf, 0, len);
+                    }
+                }
+                byte[] data = bos.toByteArray();
+
+                // Save to disk asynchronously so response is not delayed
+                backgroundExecutor.execute(() -> {
+                    try {
+                        File targetFile = new File(getCacheDir(context), relativePath);
+                        File parent = targetFile.getParentFile();
+                        if (parent != null && !parent.exists()) parent.mkdirs();
+                        try (FileOutputStream fos = new FileOutputStream(targetFile)) {
+                            fos.write(data);
+                        }
+                    } catch (Exception e) {
+                        Log.w(TAG, "Failed to cache asset: " + relativePath, e);
+                    }
+                });
+
+                return createResponse(mimeType, new ByteArrayInputStream(data));
+            }
+        } catch (Exception e) {
+            Log.d(TAG, "Network fetch failed for " + urlStr + ", checking offline asset");
+        }
+
+        // If network fetch failed, fallback to local cache/asset
+        InputStream fallback = openCachedOrAsset(context, relativePath);
+        if (fallback != null) {
+            return createResponse(mimeType, fallback);
+        }
+
+        return null;
+    }
+
+    private static void refreshHtmlInBackground(Context context, String urlStr) {
+        if (updateScheduled) return;
+        updateScheduled = true;
+        backgroundExecutor.execute(() -> {
+            try {
+                URL url = new URL(urlStr);
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("GET");
+                conn.setConnectTimeout(6000);
+                conn.setReadTimeout(8000);
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0 InstaMusicApp/1.0 (Android; Mobile)");
+                conn.connect();
+
+                if (conn.getResponseCode() == 200) {
+                    ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                    try (InputStream in = new BufferedInputStream(conn.getInputStream())) {
+                        byte[] buf = new byte[8192];
+                        int len;
+                        while ((len = in.read(buf)) != -1) {
+                            bos.write(buf, 0, len);
+                        }
+                    }
+                    byte[] data = bos.toByteArray();
+                    if (data.length > 500) {
+                        File diskHtml = new File(getCacheDir(context), "index.html");
+                        try (FileOutputStream fos = new FileOutputStream(diskHtml)) {
+                            fos.write(data);
+                        }
+                        Log.d(TAG, "Successfully refreshed cached index.html (" + data.length + " bytes)");
+                    }
+                }
+            } catch (Exception e) {
+                Log.d(TAG, "Could not refresh index.html in background: " + e.getMessage());
+            } finally {
+                updateScheduled = false;
+            }
+        });
+    }
+}

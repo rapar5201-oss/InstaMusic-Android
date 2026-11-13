@@ -54,6 +54,30 @@
     if (!style.parentNode) (document.head || document.documentElement).appendChild(style);
   } catch(e) {}
 
+  // Offline status notification
+  function notifyOfflineState() {
+    var isOff = !navigator.onLine;
+    var bar = document.getElementById('__offline_status_bar');
+    if (isOff) {
+      if (!bar) {
+        bar = document.createElement('div');
+        bar.id = '__offline_status_bar';
+        bar.textContent = 'Offline Mode • Playing Saved Songs';
+        bar.style.cssText = 'position:fixed;top:0;left:0;right:0;height:24px;background:#e11d48;color:#ffffff;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center;z-index:999999;box-shadow:0 2px 8px rgba(0,0,0,0.4);letter-spacing:0.3px;pointer-events:none;';
+        if (document.body) document.body.appendChild(bar);
+        else if (document.documentElement) document.documentElement.appendChild(bar);
+      }
+    } else {
+      if (bar && bar.parentNode) {
+        bar.parentNode.removeChild(bar);
+      }
+    }
+  }
+
+  window.addEventListener('online', notifyOfflineState);
+  window.addEventListener('offline', notifyOfflineState);
+  setTimeout(notifyOfflineState, 1500);
+
   var lastTitle = '', lastArtist = '', lastAlbum = '', lastArt = '', lastIdentity = '';
   var lastPlaying = null, lastPositionSecond = -1, lastDurationSecond = -1;
   var syncTimer = 0;
@@ -106,6 +130,17 @@
         reportInfo(a, ev === 'play' || ev === 'playing' || ev === 'pause' || ev === 'ended' || ev === 'durationchange');
         sync();
       });
+    });
+
+    a.addEventListener('error', function() {
+      if (!navigator.onLine) {
+        try {
+          var b = bridge();
+          if (b && b.showToast) {
+            b.showToast('Song not downloaded for offline playback. Play your saved songs from Library!');
+          }
+        } catch(e) {}
+      }
     });
   }
 
@@ -288,16 +323,12 @@
     if (meta && meta.title && meta.title.trim()) {
       reportMeta(meta.title, meta.artist, meta.album || 'INSTA MUSIC', meta.cover || '', playing, meta.id || '');
     } else if (meta && meta.id && meta.id !== lastIdentity) {
-      // A new track is selected but its metadata hasn't hydrated yet. Clear old text/art
-      // immediately rather than displaying the previous track during SPA transitions.
       reportMeta('', '', 'INSTA MUSIC', '', playing, meta.id, true);
     }
 
     if (active) reportInfo(active, false);
   }
 
-  // SPA route changes do not reload the WebView. Observe both history changes and
-  // DOM mutations, while the polling pass catches same-document storage updates.
   try {
     ['pushState', 'replaceState'].forEach(function(name) {
       var original = history[name];
