@@ -6,12 +6,23 @@ android {
         applicationId "com.instamusic.app"
         minSdk 24
         targetSdk 34
-        versionCode 1
-        versionName "1.0.0"
+        versionCode project.hasProperty('versionCode') ? project.property('versionCode').toInteger() : 12
+        versionName project.hasProperty('versionName') ? project.property('versionName') : "1.0.12"
     }
-    buildTypes { debug { } }
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.debug
+        }
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.debug
+        }
+    }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+}
+dependencies {
+    implementation 'androidx.core:core:1.13.1'
 }

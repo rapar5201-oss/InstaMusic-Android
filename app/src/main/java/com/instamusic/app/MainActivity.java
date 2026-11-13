@@ -42,6 +42,11 @@ public class MainActivity extends Activity {
         public void onSplashComplete() {
             handler.post(() -> { splashDone = true; revealWhenReady(); });
         }
+
+        @JavascriptInterface
+        public void checkForUpdates() {
+            handler.post(() -> UpdateManager.checkForUpdates(MainActivity.this, true));
+        }
     }
 
     public class MediaBridge {
@@ -76,6 +81,11 @@ public class MainActivity extends Activity {
                 intent.putExtra(MusicPlaybackService.EXTRA_IS_PLAYING, isPlaying);
                 startPlaybackService(intent);
             });
+        }
+
+        @JavascriptInterface
+        public void checkForUpdates() {
+            handler.post(() -> UpdateManager.checkForUpdates(MainActivity.this, true));
         }
     }
 
@@ -156,6 +166,15 @@ public class MainActivity extends Activity {
             registerReceiver(mediaActionReceiver, filter);
         }
 
+        // Initialize update channel and schedule in-app update check
+        UpdateManager.initNotificationChannel(this);
+        boolean fromNotification = getIntent() != null && getIntent().getBooleanExtra(UpdateManager.EXTRA_CHECK_UPDATE, false);
+        if (fromNotification) {
+            UpdateManager.checkForUpdates(this, true);
+        } else {
+            handler.postDelayed(() -> UpdateManager.checkForUpdates(MainActivity.this, false), 3500);
+        }
+
         setupSplash();
         setupApp();
 
@@ -163,6 +182,15 @@ public class MainActivity extends Activity {
         else appView.loadUrl(APP_URL);
 
         handler.postDelayed(() -> { splashDone = true; revealWhenReady(); }, 12000);
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        if (intent != null && intent.getBooleanExtra(UpdateManager.EXTRA_CHECK_UPDATE, false)) {
+            UpdateManager.checkForUpdates(this, true);
+        }
     }
 
     private void checkAndRequestNotificationPermission() {
@@ -284,7 +312,6 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onPause() {
-        // Keep WebView audio playing when app is switched or screen is locked
         super.onPause();
     }
 

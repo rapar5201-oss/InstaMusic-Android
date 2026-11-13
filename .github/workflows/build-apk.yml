@@ -27,22 +27,40 @@ jobs:
         with:
           gradle-version: '8.7'
 
-      - name: Build installable APK
-        run: gradle assembleDebug --no-daemon
+      - name: Build installable Release & Debug APKs
+        run: |
+          gradle assembleRelease assembleDebug -PversionCode=${{ github.run_number }} -PversionName="1.0.${{ github.run_number }}" --no-daemon
+
+      - name: Generate version.json for In-App Updates
+        run: |
+          cat <<EOF > version.json
+          {
+            "versionCode": ${{ github.run_number }},
+            "versionName": "1.0.${{ github.run_number }}",
+            "apkUrl": "https://github.com/rapar5201-oss/InstaMusic-Android/releases/download/latest-apk/app-release.apk",
+            "releaseNotes": "In-app updates enabled, hidden watermark badge, and playback controls."
+          }
+          EOF
 
       - uses: actions/upload-artifact@v4
         with:
           name: InstaMusic-APK
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: |
+            app/build/outputs/apk/release/app-release.apk
+            app/build/outputs/apk/debug/app-debug.apk
+            version.json
           retention-days: 90
 
       - name: Publish latest APK release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest-apk
-          name: InstaMusic latest APK
-          body: "Installable InstaMusic Android app. Loads live site at https://instamusic.lovable.app."
-          files: app/build/outputs/apk/debug/app-debug.apk
+          name: InstaMusic latest APK (v1.0.${{ github.run_number }})
+          body: "Installable InstaMusic Android app. Loads live site at https://instamusic.lovable.app with watermark hidden, notification media playback, and automated in-app updates."
+          files: |
+            app/build/outputs/apk/release/app-release.apk
+            app/build/outputs/apk/debug/app-debug.apk
+            version.json
           make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

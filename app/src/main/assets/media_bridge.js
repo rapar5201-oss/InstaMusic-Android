@@ -48,10 +48,10 @@
 
   // Hide Lovable badge inside Android app
   try {
-    var style = document.createElement('style');
+    var style = document.getElementById('__hide_lovable_badge') || document.createElement('style');
     style.id = '__hide_lovable_badge';
-    style.textContent = '#lovable-badge { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }';
-    (document.head || document.documentElement).appendChild(style);
+    style.textContent = '#lovable-badge, [data-lovable-badge], a[href*="lovable.dev"], .lovable-badge, button[aria-label*="Lovable" i], a[aria-label*="Lovable" i] { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; transform: scale(0) !important; width: 0 !important; height: 0 !important; overflow: hidden !important; }';
+    if (!style.parentNode) (document.head || document.documentElement).appendChild(style);
   } catch(e) {}
 
   var lastTitle = '', lastArtist = '', lastAlbum = '', lastArt = '', lastIdentity = '';
