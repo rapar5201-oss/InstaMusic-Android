@@ -6,16 +6,24 @@ android {
         applicationId "com.instamusic.app"
         minSdk 24
         targetSdk 34
-        versionCode project.hasProperty('versionCode') ? project.property('versionCode').toInteger() : 12
-        versionName project.hasProperty('versionName') ? project.property('versionName') : "1.0.12"
+        versionCode project.hasProperty('versionCode') ? project.property('versionCode').toInteger() : 14
+        versionName project.hasProperty('versionName') ? project.property('versionName') : "1.0.14"
+    }
+    signingConfigs {
+        permanentKey {
+            storeFile file('keystore/instamusic.keystore')
+            storePassword 'instamusic123'
+            keyAlias 'instamusic'
+            keyPassword 'instamusic123'
+        }
     }
     buildTypes {
         debug {
-            signingConfig signingConfigs.debug
+            signingConfig signingConfigs.permanentKey
         }
         release {
             minifyEnabled false
-            signingConfig signingConfigs.debug
+            signingConfig signingConfigs.permanentKey
         }
     }
     compileOptions {
