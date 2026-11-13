@@ -9,12 +9,20 @@ import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageInfo;
+import android.content.res.ColorStateList;
+import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
 import android.util.Log;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.widget.Button;
+import android.widget.ProgressBar;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.core.content.FileProvider;
@@ -29,13 +37,15 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class UpdateManager {
     private static final String TAG = "UpdateManager";
     public static final String CHANNEL_ID = "instamusic_updates";
-    public static final int NOTIFICATION_ID = 202;
+    public static final int NOTIFICATION_ID_UPDATE = 202;
+    public static final int NOTIFICATION_ID_PROGRESS = 203;
     public static final String EXTRA_CHECK_UPDATE = "extra_check_update";
 
     private static final String VERSION_URL = "https://github.com/rapar5201-oss/InstaMusic-Android/releases/download/latest-apk/version.json";
@@ -44,7 +54,11 @@ public class UpdateManager {
 
     private static final ExecutorService executor = Executors.newSingleThreadExecutor();
     private static final Handler mainHandler = new Handler(Looper.getMainLooper());
-    private static boolean isDownloading = false;
+    private static volatile boolean isDownloading = false;
+    private static volatile boolean cancelRequested = false;
+
+    private static File pendingInstallFile = null;
+    private static String pendingFallbackUrl = null;
 
     public static void initNotificationChannel(Context context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -55,7 +69,7 @@ public class UpdateManager {
                     "App Updates",
                     NotificationManager.IMPORTANCE_HIGH
                 );
-                channel.setDescription("Notifies you when a new version of InstaMusic is available");
+                channel.setDescription("Notifies you when a new version of InstaMusic is available and tracks download progress");
                 channel.enableLights(true);
                 channel.enableVibration(true);
                 nm.createNotificationChannel(channel);
@@ -67,12 +81,16 @@ public class UpdateManager {
         if (activity == null || activity.isFinishing()) return;
         initNotificationChannel(activity.getApplicationContext());
 
+        if (userInitiated) {
+            Toast.makeText(activity, "Checking for updates...", Toast.LENGTH_SHORT).show();
+        }
+
         executor.execute(() -> {
             try {
                 UpdateInfo info = fetchUpdateInfo();
                 if (info == null) {
                     if (userInitiated) {
-                        mainHandler.post(() -> Toast.makeText(activity, "Unable to check for updates right now", Toast.LENGTH_SHORT).show());
+                        mainHandler.post(() -> Toast.makeText(activity, "Unable to check for updates right now. Please check your network.", Toast.LENGTH_SHORT).show());
                     }
                     return;
                 }
@@ -82,13 +100,13 @@ public class UpdateManager {
                 Log.d(TAG, "Current versionCode: " + currentCode + ", Remote versionCode: " + info.versionCode);
 
                 if (info.versionCode > currentCode) {
-                    // Post system notification
-                    showUpdateNotification(activity.getApplicationContext(), info);
+                    // Post system notification for update available
+                    showUpdateAvailableNotification(activity.getApplicationContext(), info);
 
                     // Show in-app update dialog
                     mainHandler.post(() -> {
                         if (!activity.isFinishing()) {
-                            showUpdateDialog(activity, info);
+                            showUpdatePromptDialog(activity, info, pInfo.versionName);
                         }
                     });
                 } else if (userInitiated) {
@@ -103,7 +121,7 @@ public class UpdateManager {
         });
     }
 
-    private static class UpdateInfo {
+    public static class UpdateInfo {
         int versionCode;
         String versionName;
         String apkUrl;
@@ -204,7 +222,7 @@ public class UpdateManager {
         }
     }
 
-    public static void showUpdateNotification(Context context, UpdateInfo info) {
+    public static void showUpdateAvailableNotification(Context context, UpdateInfo info) {
         try {
             NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
             if (nm == null) return;
@@ -217,7 +235,7 @@ public class UpdateManager {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 flags |= PendingIntent.FLAG_IMMUTABLE;
             }
-            PendingIntent pi = PendingIntent.getActivity(context, 202, intent, flags);
+            PendingIntent pi = PendingIntent.getActivity(context, NOTIFICATION_ID_UPDATE, intent, flags);
 
             Notification.Builder builder;
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -227,7 +245,7 @@ public class UpdateManager {
             }
 
             builder.setContentTitle("InstaMusic Update Available")
-                   .setContentText("Version " + info.versionName + " is ready to install. Tap to update.")
+                   .setContentText("Version " + info.versionName + " is ready. Tap to download & install.")
                    .setSmallIcon(R.drawable.ic_music_note)
                    .setAutoCancel(true)
                    .setContentIntent(pi);
@@ -236,19 +254,22 @@ public class UpdateManager {
                 builder.setPriority(Notification.PRIORITY_HIGH);
             }
 
-            nm.notify(NOTIFICATION_ID, builder.build());
+            nm.notify(NOTIFICATION_ID_UPDATE, builder.build());
         } catch (Exception e) {
             Log.e(TAG, "Failed to show update notification", e);
         }
     }
 
-    public static void showUpdateDialog(Activity activity, UpdateInfo info) {
+    public static void showUpdatePromptDialog(Activity activity, UpdateInfo info, String currentVersion) {
         if (activity == null || activity.isFinishing()) return;
 
         new AlertDialog.Builder(activity)
             .setTitle("New Update Available")
-            .setMessage("A new version of InstaMusic (" + info.versionName + ") is available!\n\n"
-                + info.releaseNotes + "\n\nWould you like to download and install it now?")
+            .setMessage("A new version of InstaMusic is available!\n\n"
+                + "• Installed version: v" + currentVersion + "\n"
+                + "• New version: v" + info.versionName + "\n\n"
+                + "Release Notes:\n" + info.releaseNotes + "\n\n"
+                + "Would you like to download and install this update now?")
             .setPositiveButton("Update Now", (dialog, which) -> {
                 dialog.dismiss();
                 downloadAndInstallApk(activity, info.apkUrl, info.versionName);
@@ -264,25 +285,68 @@ public class UpdateManager {
             .show();
     }
 
-    private static void downloadAndInstallApk(Activity activity, String apkUrl, String versionName) {
+    public static void downloadAndInstallApk(Activity activity, String apkUrl, String versionName) {
+        if (activity == null || activity.isFinishing()) return;
         if (isDownloading) {
-            Toast.makeText(activity, "Update is already downloading...", Toast.LENGTH_SHORT).show();
+            Toast.makeText(activity, "Update download is already in progress...", Toast.LENGTH_SHORT).show();
             return;
         }
-        isDownloading = true;
 
-        AlertDialog progressDialog = new AlertDialog.Builder(activity)
-            .setTitle("Downloading InstaMusic v" + versionName)
-            .setMessage("Connecting to download server...")
+        isDownloading = true;
+        cancelRequested = false;
+
+        LayoutInflater inflater = LayoutInflater.from(activity);
+        View dialogView = inflater.inflate(R.layout.dialog_update_progress, null);
+
+        TextView titleView = dialogView.findViewById(R.id.update_dialog_title);
+        TextView statusText = dialogView.findViewById(R.id.update_status_text);
+        ProgressBar progressBar = dialogView.findViewById(R.id.update_progress_bar);
+        TextView progressPercent = dialogView.findViewById(R.id.update_progress_percent);
+        TextView progressBytes = dialogView.findViewById(R.id.update_progress_bytes);
+        Button btnCancel = dialogView.findViewById(R.id.btn_update_cancel);
+        Button btnAction = dialogView.findViewById(R.id.btn_update_action);
+
+        titleView.setText("Downloading InstaMusic v" + versionName);
+        statusText.setText("Connecting to download server...");
+        progressBar.setIndeterminate(true);
+        progressPercent.setText("0%");
+        progressBytes.setText("Connecting...");
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            progressBar.setProgressTintList(ColorStateList.valueOf(0xFFFF5100));
+            progressBar.setIndeterminateTintList(ColorStateList.valueOf(0xFFFF5100));
+        }
+
+        AlertDialog dialog = new AlertDialog.Builder(activity)
+            .setView(dialogView)
             .setCancelable(false)
             .create();
-        progressDialog.show();
+
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        }
+
+        btnCancel.setOnClickListener(v -> {
+            if (isDownloading) {
+                cancelRequested = true;
+                statusText.setText("Cancelling download...");
+                btnCancel.setEnabled(false);
+            } else {
+                dialog.dismiss();
+            }
+        });
+
+        dialog.show();
+
+        // Initial ongoing progress notification
+        updateDownloadNotification(activity.getApplicationContext(), versionName, -1, "Connecting...", false, null);
 
         executor.execute(() -> {
             HttpURLConnection conn = null;
             InputStream in = null;
             FileOutputStream out = null;
             File apkFile = null;
+
             try {
                 URL url = new URL(apkUrl);
                 conn = (HttpURLConnection) url.openConnection();
@@ -309,8 +373,13 @@ public class UpdateManager {
                     redirects++;
                 }
 
+                if (cancelRequested) {
+                    handleDownloadCancelled(activity, dialog, null);
+                    return;
+                }
+
                 if (status != HttpURLConnection.HTTP_OK) {
-                    throw new Exception("HTTP server returned " + status);
+                    throw new Exception("Server response HTTP " + status);
                 }
 
                 long fileLength = conn.getContentLength();
@@ -319,55 +388,118 @@ public class UpdateManager {
                 File cacheDir = activity.getExternalCacheDir() != null ? activity.getExternalCacheDir() : activity.getCacheDir();
                 File updateDir = new File(cacheDir, "updates");
                 if (!updateDir.exists()) updateDir.mkdirs();
-                apkFile = new File(updateDir, "InstaMusic-update.apk");
+                apkFile = new File(updateDir, "InstaMusic-v" + versionName + ".apk");
                 if (apkFile.exists()) apkFile.delete();
 
                 out = new FileOutputStream(apkFile);
-                byte[] data = new byte[8192];
-                long total = 0;
-                int count;
-                long lastUpdate = 0;
+                byte[] buffer = new byte[8192];
+                long totalDownloaded = 0;
+                int readBytes;
+                long lastUiUpdate = 0;
 
-                while ((count = in.read(data)) != -1) {
-                    total += count;
-                    out.write(data, 0, count);
+                while ((readBytes = in.read(buffer)) != -1) {
+                    if (cancelRequested) {
+                        handleDownloadCancelled(activity, dialog, apkFile);
+                        return;
+                    }
+
+                    totalDownloaded += readBytes;
+                    out.write(buffer, 0, readBytes);
 
                     long now = System.currentTimeMillis();
-                    if (now - lastUpdate > 300) {
-                        lastUpdate = now;
-                        final int progress = (fileLength > 0) ? (int) ((total * 100) / fileLength) : -1;
-                        final long mbDownloaded = total / (1024 * 1024);
+                    if (now - lastUiUpdate >= 120) {
+                        lastUiUpdate = now;
+                        final long curTotal = totalDownloaded;
+                        final long targetTotal = fileLength;
+                        final int progress = (targetTotal > 0) ? (int) ((curTotal * 100) / targetTotal) : -1;
+                        final String mbString = formatBytes(curTotal) + (targetTotal > 0 ? " / " + formatBytes(targetTotal) : "");
+
                         mainHandler.post(() -> {
-                            if (!activity.isFinishing() && progressDialog.isShowing()) {
+                            if (!activity.isFinishing() && dialog.isShowing()) {
                                 if (progress >= 0) {
-                                    progressDialog.setMessage("Downloaded " + progress + "% (" + mbDownloaded + " MB)");
+                                    progressBar.setIndeterminate(false);
+                                    progressBar.setProgress(progress);
+                                    statusText.setText("Downloading update: " + progress + "%");
+                                    progressPercent.setText(progress + "%");
                                 } else {
-                                    progressDialog.setMessage("Downloaded " + mbDownloaded + " MB...");
+                                    progressBar.setIndeterminate(true);
+                                    statusText.setText("Downloading update...");
+                                    progressPercent.setText("");
                                 }
+                                progressBytes.setText(mbString);
                             }
                         });
+
+                        updateDownloadNotification(activity.getApplicationContext(), versionName, progress, mbString, false, null);
                     }
                 }
+
                 out.flush();
 
-                final File downloadedFile = apkFile;
+                if (cancelRequested) {
+                    handleDownloadCancelled(activity, dialog, apkFile);
+                    return;
+                }
+
+                final File downloadedApk = apkFile;
+                final long finalSize = downloadedApk != null ? downloadedApk.length() : 0;
+                Log.d(TAG, "Update APK downloaded successfully, size: " + finalSize + " bytes");
+
                 mainHandler.post(() -> {
                     isDownloading = false;
-                    try { if (progressDialog.isShowing()) progressDialog.dismiss(); } catch (Exception ignored) {}
-                    installApk(activity, downloadedFile, apkUrl);
+                    cancelRequested = false;
+
+                    if (!activity.isFinishing() && dialog.isShowing()) {
+                        progressBar.setIndeterminate(false);
+                        progressBar.setProgress(100);
+                        statusText.setText("Download complete! Ready to install.");
+                        progressPercent.setText("100%");
+                        progressBytes.setText(formatBytes(finalSize));
+
+                        btnCancel.setText("Close");
+                        btnCancel.setEnabled(true);
+                        btnCancel.setOnClickListener(v -> dialog.dismiss());
+
+                        btnAction.setVisibility(View.VISIBLE);
+                        btnAction.setText("Install Now");
+                        btnAction.setOnClickListener(v -> installApk(activity, downloadedApk, apkUrl));
+                    }
+
+                    // Complete notification with install action
+                    updateDownloadNotification(activity.getApplicationContext(), versionName, 100, "Download complete. Tap to install.", true, downloadedApk);
+
+                    // Automatically trigger installer
+                    installApk(activity, downloadedApk, apkUrl);
                 });
 
             } catch (Exception e) {
-                Log.e(TAG, "Download failed", e);
+                Log.e(TAG, "Download error", e);
                 isDownloading = false;
+                final String errorMsg = (e.getMessage() != null && !e.getMessage().isEmpty()) ? e.getMessage() : "Unknown network error";
+
                 mainHandler.post(() -> {
-                    try { if (progressDialog.isShowing()) progressDialog.dismiss(); } catch (Exception ignored) {}
-                    Toast.makeText(activity, "Download error: " + e.getMessage() + ". Opening in browser...", Toast.LENGTH_LONG).show();
-                    try {
-                        Intent bIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(apkUrl));
-                        activity.startActivity(bIntent);
-                    } catch (Exception ignored) {}
+                    if (!activity.isFinishing() && dialog.isShowing()) {
+                        progressBar.setIndeterminate(false);
+                        progressBar.setProgress(0);
+                        statusText.setText("Download failed: " + errorMsg);
+                        progressBytes.setText("Failed");
+
+                        btnCancel.setText("Close");
+                        btnCancel.setEnabled(true);
+                        btnCancel.setOnClickListener(v -> dialog.dismiss());
+
+                        btnAction.setVisibility(View.VISIBLE);
+                        btnAction.setText("Retry");
+                        btnAction.setOnClickListener(v -> {
+                            dialog.dismiss();
+                            downloadAndInstallApk(activity, apkUrl, versionName);
+                        });
+                    }
+
+                    Toast.makeText(activity, "Download failed: " + errorMsg, Toast.LENGTH_LONG).show();
+                    cancelDownloadNotification(activity.getApplicationContext());
                 });
+
             } finally {
                 try { if (out != null) out.close(); } catch (Exception ignored) {}
                 try { if (in != null) in.close(); } catch (Exception ignored) {}
@@ -376,10 +508,107 @@ public class UpdateManager {
         });
     }
 
+    private static void handleDownloadCancelled(Activity activity, AlertDialog dialog, File partialFile) {
+        isDownloading = false;
+        cancelRequested = false;
+        if (partialFile != null && partialFile.exists()) {
+            try { partialFile.delete(); } catch (Exception ignored) {}
+        }
+
+        cancelDownloadNotification(activity.getApplicationContext());
+
+        mainHandler.post(() -> {
+            try {
+                if (!activity.isFinishing() && dialog != null && dialog.isShowing()) {
+                    TextView statusText = dialog.findViewById(R.id.update_status_text);
+                    if (statusText != null) statusText.setText("Download cancelled.");
+                    mainHandler.postDelayed(() -> {
+                        try { if (dialog.isShowing()) dialog.dismiss(); } catch (Exception ignored) {}
+                    }, 800);
+                }
+            } catch (Exception ignored) {}
+            Toast.makeText(activity, "Update download cancelled", Toast.LENGTH_SHORT).show();
+        });
+    }
+
+    private static String formatBytes(long bytes) {
+        if (bytes <= 0) return "0.0 MB";
+        double mb = bytes / (1024.0 * 1024.0);
+        return String.format(Locale.US, "%.1f MB", mb);
+    }
+
+    public static void updateDownloadNotification(Context context, String versionName, int progress, String details, boolean isComplete, File downloadedFile) {
+        try {
+            NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+            if (nm == null) return;
+
+            Notification.Builder builder;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                builder = new Notification.Builder(context, CHANNEL_ID);
+            } else {
+                builder = new Notification.Builder(context);
+            }
+
+            builder.setSmallIcon(R.drawable.ic_music_note);
+
+            if (isComplete && downloadedFile != null && downloadedFile.exists()) {
+                Intent installIntent = createInstallIntent(context, downloadedFile);
+                int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    flags |= PendingIntent.FLAG_IMMUTABLE;
+                }
+                PendingIntent pi = PendingIntent.getActivity(context, NOTIFICATION_ID_PROGRESS, installIntent, flags);
+
+                builder.setContentTitle("InstaMusic Update Ready")
+                       .setContentText("Version " + versionName + " downloaded. Tap to install.")
+                       .setProgress(0, 0, false)
+                       .setOngoing(false)
+                       .setAutoCancel(true)
+                       .setContentIntent(pi);
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                    builder.setPriority(Notification.PRIORITY_HIGH);
+                }
+            } else {
+                builder.setContentTitle("Downloading InstaMusic v" + versionName)
+                       .setContentText(details)
+                       .setOngoing(true);
+
+                if (progress >= 0) {
+                    builder.setProgress(100, progress, false);
+                } else {
+                    builder.setProgress(100, 0, true);
+                }
+            }
+
+            nm.notify(NOTIFICATION_ID_PROGRESS, builder.build());
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to update download notification", e);
+        }
+    }
+
+    public static void cancelDownloadNotification(Context context) {
+        try {
+            NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+            if (nm != null) {
+                nm.cancel(NOTIFICATION_ID_PROGRESS);
+            }
+        } catch (Exception ignored) {}
+    }
+
+    public static Intent createInstallIntent(Context context, File apkFile) {
+        Uri apkUri = FileProvider.getUriForFile(context, context.getPackageName() + ".provider", apkFile);
+        Intent installIntent = new Intent(Intent.ACTION_VIEW);
+        installIntent.setDataAndType(apkUri, "application/vnd.android.package-archive");
+        installIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        installIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        return installIntent;
+    }
+
     public static void installApk(Activity activity, File apkFile, String fallbackUrl) {
         if (activity == null || activity.isFinishing()) return;
         if (apkFile == null || !apkFile.exists() || apkFile.length() == 0) {
-            Toast.makeText(activity, "Downloaded file not found. Opening browser...", Toast.LENGTH_SHORT).show();
+            Toast.makeText(activity, "Update package not found. Opening browser...", Toast.LENGTH_SHORT).show();
             try {
                 activity.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(fallbackUrl)));
             } catch (Exception ignored) {}
@@ -389,19 +618,31 @@ public class UpdateManager {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 if (!activity.getPackageManager().canRequestPackageInstalls()) {
-                    Toast.makeText(activity, "Please allow InstaMusic to install update packages", Toast.LENGTH_LONG).show();
-                    Intent permIntent = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES);
-                    permIntent.setData(Uri.parse("package:" + activity.getPackageName()));
-                    activity.startActivity(permIntent);
+                    pendingInstallFile = apkFile;
+                    pendingFallbackUrl = fallbackUrl;
+
+                    new AlertDialog.Builder(activity)
+                        .setTitle("Install Permission Required")
+                        .setMessage("Android requires permission to install app updates for InstaMusic.\n\nPlease tap 'Settings', turn on 'Allow from this source', then return here to complete installation.")
+                        .setPositiveButton("Settings", (dialog, which) -> {
+                            try {
+                                Intent permIntent = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES);
+                                permIntent.setData(Uri.parse("package:" + activity.getPackageName()));
+                                activity.startActivity(permIntent);
+                            } catch (Exception ex) {
+                                Toast.makeText(activity, "Error opening settings: " + ex.getMessage(), Toast.LENGTH_SHORT).show();
+                            }
+                        })
+                        .setNegativeButton("Cancel", (dialog, which) -> {
+                            pendingInstallFile = null;
+                            dialog.dismiss();
+                        })
+                        .show();
+                    return;
                 }
             }
 
-            Uri apkUri = FileProvider.getUriForFile(activity, activity.getPackageName() + ".provider", apkFile);
-
-            Intent installIntent = new Intent(Intent.ACTION_VIEW);
-            installIntent.setDataAndType(apkUri, "application/vnd.android.package-archive");
-            installIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            installIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            Intent installIntent = createInstallIntent(activity, apkFile);
             activity.startActivity(installIntent);
         } catch (Exception e) {
             Log.e(TAG, "Failed to launch installer", e);
@@ -409,6 +650,19 @@ public class UpdateManager {
             try {
                 activity.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(fallbackUrl)));
             } catch (Exception ignored) {}
+        }
+    }
+
+    public static void checkPendingInstallOnResume(Activity activity) {
+        if (activity == null || activity.isFinishing()) return;
+        if (pendingInstallFile != null && pendingInstallFile.exists()) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || activity.getPackageManager().canRequestPackageInstalls()) {
+                File fileToInstall = pendingInstallFile;
+                String fallback = pendingFallbackUrl;
+                pendingInstallFile = null;
+                pendingFallbackUrl = null;
+                installApk(activity, fileToInstall, fallback);
+            }
         }
     }
 }

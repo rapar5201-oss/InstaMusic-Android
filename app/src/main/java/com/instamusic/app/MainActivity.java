@@ -11,6 +11,8 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.view.Menu;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
@@ -151,6 +153,11 @@ public class MainActivity extends Activity {
         Button retry = findViewById(R.id.btn_retry);
         retry.setOnClickListener(v -> reloadApp());
 
+        Button btnCheckUpdates = findViewById(R.id.btn_check_updates);
+        if (btnCheckUpdates != null) {
+            btnCheckUpdates.setOnClickListener(v -> UpdateManager.checkForUpdates(MainActivity.this, true));
+        }
+
         // Ask for notification permission on app open
         checkAndRequestNotificationPermission();
 
@@ -191,6 +198,25 @@ public class MainActivity extends Activity {
         if (intent != null && intent.getBooleanExtra(UpdateManager.EXTRA_CHECK_UPDATE, false)) {
             UpdateManager.checkForUpdates(this, true);
         }
+    }
+
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        menu.add(0, 1, 0, "Check for Updates");
+        menu.add(0, 2, 1, "Refresh Page");
+        return true;
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        if (item.getItemId() == 1) {
+            UpdateManager.checkForUpdates(this, true);
+            return true;
+        } else if (item.getItemId() == 2) {
+            reloadApp();
+            return true;
+        }
+        return super.onOptionsItemSelected(item);
     }
 
     private void checkAndRequestNotificationPermission() {
@@ -308,6 +334,7 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         if (appView != null) appView.onResume();
+        UpdateManager.checkPendingInstallOnResume(this);
     }
 
     @Override
