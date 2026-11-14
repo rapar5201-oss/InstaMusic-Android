@@ -35,7 +35,7 @@ public class MusicReminderScheduler {
     // Interval: 30 minutes
     public static final long REMINDER_INTERVAL_MS = 30 * 60 * 1000L;
     // Minimum cooldown between notifications: 20 minutes
-    public static final long MIN_COOLDOWN_MS = 20 * 60 * 1000L;
+    public static final long MIN_COOLDOWN_MS = 15 * 60 * 1000L;
 
     private static final ExecutorService backgroundExecutor = Executors.newSingleThreadExecutor();
 
@@ -132,24 +132,32 @@ public class MusicReminderScheduler {
                     String titleText;
                     String bodyText;
 
+                    int variant = (int) (Math.random() * 5);
                     if (track != null && track.title != null && !track.title.isEmpty()) {
-                        int variant = (int) (Math.random() * 4);
                         if (variant == 0) {
                             titleText = "Your song is missing you 🎵";
-                            bodyText = "Pick up where you left off with \"" + track.title + "\" by " + track.artist + ". Tap to keep the vibe going.";
+                            bodyText = "Pick up where you left off with \"" + track.title + "\" by " + track.artist + ". Tap to play now.";
                         } else if (variant == 1) {
-                            titleText = "Ready to jump back in?";
-                            bodyText = "Continue listening to \"" + track.title + "\" on InstaMusic.";
+                            titleText = "Your waiting tracks are ready 🎶";
+                            bodyText = "Your queue and saved library have songs waiting for you. Tap to resume listening.";
                         } else if (variant == 2) {
-                            titleText = "Missing your tunes?";
-                            bodyText = "\"" + track.title + "\" and your saved library are ready for you.";
+                            titleText = "New tracks waiting on InstaMusic 🎧";
+                            bodyText = "Fresh mixes and trending charts are live. Tap to discover what's new today.";
+                        } else if (variant == 3) {
+                            titleText = "Time for your favorite vibe? ✨";
+                            bodyText = "Ready for another play of \"" + track.title + "\" by " + track.artist + "? Tap to turn it up.";
                         } else {
-                            titleText = "Your favorite track is waiting";
-                            bodyText = "Ready for another play of \"" + track.title + "\" by " + track.artist + "?";
+                            titleText = "Take a music break ⚡";
+                            bodyText = "Tune back into \"" + track.title + "\" or jump into your daily mixes.";
                         }
                     } else {
-                        titleText = "Your music is ready 🎵";
-                        bodyText = "Discover trending tracks and enjoy your saved library on InstaMusic.";
+                        if (variant % 2 == 0) {
+                            titleText = "Your waiting tracks are ready 🎶";
+                            bodyText = "Your queue and saved library have songs waiting for you. Tap to start listening.";
+                        } else {
+                            titleText = "New tracks waiting on InstaMusic 🎧";
+                            bodyText = "Fresh beats and trending playlists are live. Tap to hear what's playing today.";
+                        }
                     }
 
                     // 7. Load artwork for notification large icon

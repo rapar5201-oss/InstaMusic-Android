@@ -165,6 +165,7 @@ public class MainActivity extends Activity {
     public void onCreate(Bundle state) {
         super.onCreate(state);
         MusicReminderScheduler.schedulePeriodicReminders(this);
+        handleReminderIntent(getIntent());
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         Window w = getWindow();
         w.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
@@ -367,6 +368,25 @@ public class MainActivity extends Activity {
         else {
             lastBackPressed = now;
             Toast.makeText(this, "Press back again to exit", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handleReminderIntent(intent);
+    }
+
+    private void handleReminderIntent(Intent intent) {
+        if (intent == null) return;
+        if (intent.getBooleanExtra("from_reminder", false)) {
+            String trackTitle = intent.getStringExtra("resume_title");
+            if (trackTitle != null && !trackTitle.trim().isEmpty()) {
+                Toast.makeText(this, "Resuming " + trackTitle + " 🎵", Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(this, "Welcome back to InstaMusic 🎵", Toast.LENGTH_SHORT).show();
+            }
         }
     }
 
