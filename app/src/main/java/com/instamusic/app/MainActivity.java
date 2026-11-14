@@ -100,6 +100,11 @@ public class MainActivity extends Activity {
         public boolean isOnline() {
             return OfflineCacheManager.isNetworkAvailable(MainActivity.this);
         }
+
+        @JavascriptInterface
+        public String getNetworkStatus() {
+            return OfflineCacheManager.getNetworkQualityJson(MainActivity.this);
+        }
     }
 
     private final BroadcastReceiver mediaActionReceiver = new BroadcastReceiver() {

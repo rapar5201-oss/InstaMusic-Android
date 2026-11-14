@@ -36,6 +36,70 @@ public class OfflineCacheManager {
     private static final ExecutorService backgroundExecutor = Executors.newSingleThreadExecutor();
     private static volatile boolean updateScheduled = false;
 
+    public static String getNetworkQualityJson(Context context) {
+        if (context == null) {
+            return "{\"online\":false,\"percent\":0,\"bandwidthKbps\":0,\"label\":\"Offline\",\"type\":\"none\"}";
+        }
+        try {
+            ConnectivityManager cm = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
+            if (cm == null) {
+                return "{\"online\":false,\"percent\":0,\"bandwidthKbps\":0,\"label\":\"Offline\",\"type\":\"none\"}";
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                Network active = cm.getActiveNetwork();
+                if (active == null) {
+                    return "{\"online\":false,\"percent\":0,\"bandwidthKbps\":0,\"label\":\"Offline\",\"type\":\"none\"}";
+                }
+                NetworkCapabilities cap = cm.getNetworkCapabilities(active);
+                if (cap == null || !cap.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) {
+                    return "{\"online\":false,\"percent\":0,\"bandwidthKbps\":0,\"label\":\"Offline\",\"type\":\"none\"}";
+                }
+
+                boolean isWifi = cap.hasTransport(NetworkCapabilities.TRANSPORT_WIFI);
+                boolean isCellular = cap.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR);
+                int bandwidthKbps = cap.getLinkDownstreamBandwidthKbps();
+
+                int percent;
+                String label;
+
+                if (bandwidthKbps <= 0) {
+                    percent = isWifi ? 85 : 65;
+                    label = isWifi ? "Good internet" : "Mobile data";
+                } else if (bandwidthKbps >= 15000) {
+                    percent = Math.min(100, 92 + (bandwidthKbps / 10000));
+                    label = "Fast internet";
+                } else if (bandwidthKbps >= 5000) {
+                    percent = 75 + (int) ((bandwidthKbps - 5000) * 16.0 / 10000.0);
+                    label = "Good internet";
+                } else if (bandwidthKbps >= 2000) {
+                    percent = 50 + (int) ((bandwidthKbps - 2000) * 24.0 / 3000.0);
+                    label = "Good internet";
+                } else if (bandwidthKbps >= 600) {
+                    percent = 32 + (int) ((bandwidthKbps - 600) * 18.0 / 1400.0);
+                    label = "Stable internet";
+                } else {
+                    percent = Math.max(10, (int) (bandwidthKbps * 30.0 / 600.0));
+                    label = "Slow connection";
+                }
+
+                String transport = isWifi ? "Wi-Fi" : (isCellular ? "Cellular" : "Ethernet");
+                return "{\"online\":true,\"percent\":" + percent + ",\"bandwidthKbps\":" + bandwidthKbps + ",\"label\":\"" + label + "\",\"type\":\"" + transport + "\"}";
+            } else {
+                NetworkInfo info = cm.getActiveNetworkInfo();
+                if (info == null || !info.isConnected()) {
+                    return "{\"online\":false,\"percent\":0,\"bandwidthKbps\":0,\"label\":\"Offline\",\"type\":\"none\"}";
+                }
+                boolean isWifi = info.getType() == ConnectivityManager.TYPE_WIFI;
+                int percent = isWifi ? 85 : 65;
+                String label = isWifi ? "Good internet" : "Mobile data";
+                return "{\"online\":true,\"percent\":" + percent + ",\"bandwidthKbps\":5000,\"label\":\"" + label + "\",\"type\":\"" + (isWifi ? "Wi-Fi" : "Cellular") + "\"}";
+            }
+        } catch (Exception e) {
+            return "{\"online\":true,\"percent\":75,\"bandwidthKbps\":4000,\"label\":\"Good internet\",\"type\":\"Network\"}";
+        }
+    }
+
     public static boolean isNetworkAvailable(Context context) {
         if (context == null) return false;
         try {
