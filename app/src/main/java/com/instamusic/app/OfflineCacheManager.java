@@ -21,6 +21,7 @@ import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -60,10 +61,8 @@ public class OfflineCacheManager {
 
     public static boolean hasCachedShell(Context context) {
         if (context == null) return false;
-        // Check disk cache first
         File diskHtml = new File(getCacheDir(context), "index.html");
         if (diskHtml.exists() && diskHtml.length() > 0) return true;
-        // Check bundled assets
         try (InputStream is = context.getAssets().open(ASSET_BASE_PATH + "/index.html")) {
             return is != null;
         } catch (Exception e) {
@@ -81,31 +80,36 @@ public class OfflineCacheManager {
         if (host == null) return null;
 
         boolean isTargetHost = host.equalsIgnoreCase(TARGET_HOST);
-        boolean online = isNetworkAvailable(context);
 
         if (isTargetHost) {
             String path = uri.getPath();
             if (path == null || path.isEmpty()) path = "/";
 
             boolean isHtmlRoute = path.equals("/") ||
+                                  path.equals("/home") ||
                                   path.equals("/library") ||
                                   path.equals("/favorites") ||
                                   path.equals("/search") ||
+                                  path.equals("/profile") ||
+                                  path.equals("/create") ||
+                                  path.equals("/welcome") ||
+                                  path.equals("/now-playing") ||
                                   path.startsWith("/artist/") ||
                                   path.startsWith("/song/") ||
                                   path.startsWith("/playlist/") ||
+                                  path.startsWith("/mix/") ||
+                                  path.startsWith("/creator/") ||
+                                  path.startsWith("/genre/") ||
                                   (!path.contains(".") && !path.startsWith("/api/"));
 
             if (isHtmlRoute) {
-                if (!online) {
-                    InputStream is = openCachedOrAsset(context, "index.html");
-                    if (is != null) {
-                        return createResponse("text/html", is);
+                // Always serve local index.html immediately for instant startup and offline support
+                InputStream is = openCachedOrAsset(context, "index.html");
+                if (is != null) {
+                    if (isNetworkAvailable(context)) {
+                        refreshHtmlInBackground(context, uri.toString());
                     }
-                } else {
-                    // When online, trigger a background refresh of index.html so cache stays fresh
-                    refreshHtmlInBackground(context, uri.toString());
-                    return null;
+                    return createResponse("text/html", is);
                 }
             }
 
@@ -114,35 +118,25 @@ public class OfflineCacheManager {
                 String relativePath = path.startsWith("/") ? path.substring(1) : path;
                 String mimeType = guessMimeType(path);
 
-                if (!online) {
-                    InputStream is = openCachedOrAsset(context, relativePath);
-                    if (is != null) {
-                        return createResponse(mimeType, is);
-                    }
-                } else {
-                    // If it is a content-hashed asset and already in local cache/assets, serve directly
-                    if (isVersionedAsset(path)) {
-                        InputStream is = openCachedOrAsset(context, relativePath);
-                        if (is != null) {
-                            return createResponse(mimeType, is);
-                        }
-                    }
-                    // Fetch live and store in disk cache for future offline use
+                // Check bundled assets and local disk cache first
+                InputStream is = openCachedOrAsset(context, relativePath);
+                if (is != null) {
+                    return createResponse(mimeType, is);
+                }
+
+                // If not found locally and network is available, fetch and cache
+                if (isNetworkAvailable(context)) {
                     return fetchAndCacheAsset(context, uri.toString(), relativePath, mimeType);
                 }
             }
         }
 
-        // Google Fonts handling when offline
-        if (!online && (host.contains("fonts.googleapis.com") || host.contains("fonts.gstatic.com"))) {
-            String lastSeg = uri.getLastPathSegment();
-            if (lastSeg != null) {
-                String fontRel = "fonts/" + lastSeg;
-                InputStream is = openCachedOrAsset(context, fontRel);
-                if (is != null) {
-                    String mime = lastSeg.endsWith(".woff2") ? "font/woff2" : "text/css";
-                    return createResponse(mime, is);
-                }
+        // Google Fonts handling when offline: return harmless empty CSS/font response so it doesn't fail
+        if (host.contains("fonts.googleapis.com") || host.contains("fonts.gstatic.com")) {
+            if (!isNetworkAvailable(context)) {
+                String emptyCss = "/* offline fonts fallback */";
+                ByteArrayInputStream bais = new ByteArrayInputStream(emptyCss.getBytes(StandardCharsets.UTF_8));
+                return createResponse("text/css", bais);
             }
         }
 
@@ -170,13 +164,6 @@ public class OfflineCacheManager {
         headers.put("Access-Control-Allow-Origin", "*");
         headers.put("Cache-Control", "public, max-age=86400");
         return new WebResourceResponse(mimeType, "UTF-8", 200, "OK", headers, is);
-    }
-
-    private static boolean isVersionedAsset(String path) {
-        if (path == null) return false;
-        return path.matches(".+-[a-zA-Z0-9_-]{6,}\\.[a-zA-Z0-9]+$") ||
-               path.matches(".+\\.[a-zA-Z0-9]{12,}\\.[a-zA-Z0-9]+$") ||
-               path.contains("/assets-v1/");
     }
 
     private static String guessMimeType(String path) {
@@ -223,7 +210,6 @@ public class OfflineCacheManager {
                 }
                 byte[] data = bos.toByteArray();
 
-                // Save to disk asynchronously so response is not delayed
                 backgroundExecutor.execute(() -> {
                     try {
                         File targetFile = new File(getCacheDir(context), relativePath);
@@ -243,7 +229,6 @@ public class OfflineCacheManager {
             Log.d(TAG, "Network fetch failed for " + urlStr + ", checking offline asset");
         }
 
-        // If network fetch failed, fallback to local cache/asset
         InputStream fallback = openCachedOrAsset(context, relativePath);
         if (fallback != null) {
             return createResponse(mimeType, fallback);

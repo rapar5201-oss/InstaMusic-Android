@@ -1,4 +1,5 @@
 (function() {
+  // Safe MediaMetadata mock
   if (typeof window.MediaMetadata === 'undefined') {
     window.MediaMetadata = function(init) {
       init = init || {};
@@ -54,29 +55,100 @@
     if (!style.parentNode) (document.head || document.documentElement).appendChild(style);
   } catch(e) {}
 
-  // Offline status notification
-  function notifyOfflineState() {
-    var isOff = !navigator.onLine;
+  // Helper to determine if app is online
+  function checkIsOnline() {
+    if (window.MediaBridge && typeof window.MediaBridge.isOnline === 'function') {
+      try {
+        return window.MediaBridge.isOnline();
+      } catch(e) {}
+    }
+    return navigator.onLine;
+  }
+
+  // Offline status notification and handling
+  function updateOfflineUI() {
+    var online = checkIsOnline();
     var bar = document.getElementById('__offline_status_bar');
-    if (isOff) {
+
+    if (!online) {
       if (!bar) {
         bar = document.createElement('div');
         bar.id = '__offline_status_bar';
-        bar.textContent = 'Offline Mode • Playing Saved Songs';
-        bar.style.cssText = 'position:fixed;top:0;left:0;right:0;height:24px;background:#e11d48;color:#ffffff;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center;z-index:999999;box-shadow:0 2px 8px rgba(0,0,0,0.4);letter-spacing:0.3px;pointer-events:none;';
+        bar.style.cssText = 'position:fixed;top:0;left:0;right:0;height:28px;background:linear-gradient(90deg,#ea580c,#f97316);color:#ffffff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:space-between;padding:0 12px;z-index:999999;box-shadow:0 2px 10px rgba(0,0,0,0.5);letter-spacing:0.3px;font-family:system-ui,-apple-system,sans-serif;';
+        
+        var leftSpan = document.createElement('span');
+        leftSpan.textContent = '⚡ Offline Mode • Saved Library Ready';
+        bar.appendChild(leftSpan);
+
+        var libBtn = document.createElement('button');
+        libBtn.textContent = 'Go to Library';
+        libBtn.style.cssText = 'background:rgba(0,0,0,0.3);border:none;border-radius:12px;padding:2px 8px;color:#fff;font-size:11px;font-weight:700;cursor:pointer;';
+        libBtn.onclick = function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          navigateTo('/library');
+        };
+        bar.appendChild(libBtn);
+
         if (document.body) document.body.appendChild(bar);
         else if (document.documentElement) document.documentElement.appendChild(bar);
       }
+
+      // Handle search view when offline
+      handleSearchOffline();
     } else {
       if (bar && bar.parentNode) {
         bar.parentNode.removeChild(bar);
       }
+      var searchNotice = document.getElementById('__offline_search_notice');
+      if (searchNotice && searchNotice.parentNode) {
+        searchNotice.parentNode.removeChild(searchNotice);
+      }
     }
   }
 
-  window.addEventListener('online', notifyOfflineState);
-  window.addEventListener('offline', notifyOfflineState);
-  setTimeout(notifyOfflineState, 1500);
+  function navigateTo(path) {
+    if (window.location.pathname === path) return;
+    try {
+      window.history.pushState({}, '', path);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    } catch(e) {
+      window.location.href = path;
+    }
+  }
+
+  function handleSearchOffline() {
+    if (window.location.pathname.startsWith('/search')) {
+      var searchNotice = document.getElementById('__offline_search_notice');
+      if (!searchNotice) {
+        var form = document.querySelector('form[role="search"]') || document.querySelector('input#q');
+        if (form) {
+          searchNotice = document.createElement('div');
+          searchNotice.id = '__offline_search_notice';
+          searchNotice.style.cssText = 'margin:12px 16px;padding:12px 16px;background:rgba(234,88,12,0.15);border:1px solid rgba(234,88,12,0.4);border-radius:16px;color:#f97316;font-size:13px;display:flex;flex-direction:column;gap:8px;font-family:system-ui,-apple-system,sans-serif;';
+          searchNotice.innerHTML = '<strong>Search requires internet connection</strong><span>You are currently offline. You can still access and play all your saved songs, playlists, and favorites in your Library.</span><button style="align-self:flex-start;background:#ea580c;color:#fff;border:none;border-radius:20px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;">Open Saved Library</button>';
+          var btn = searchNotice.querySelector('button');
+          if (btn) {
+            btn.onclick = function(e) {
+              e.preventDefault();
+              navigateTo('/library');
+            };
+          }
+          if (form.parentNode) {
+            form.parentNode.insertBefore(searchNotice, form.nextSibling);
+          }
+        }
+      }
+    }
+  }
+
+  window.addEventListener('online', updateOfflineUI);
+  window.addEventListener('offline', updateOfflineUI);
+  window.addEventListener('popstate', function() {
+    setTimeout(updateOfflineUI, 100);
+  });
+  setInterval(updateOfflineUI, 3000);
+  setTimeout(updateOfflineUI, 1200);
 
   var lastTitle = '', lastArtist = '', lastAlbum = '', lastArt = '', lastIdentity = '';
   var lastPlaying = null, lastPositionSecond = -1, lastDurationSecond = -1;
@@ -133,11 +205,11 @@
     });
 
     a.addEventListener('error', function() {
-      if (!navigator.onLine) {
+      if (!checkIsOnline()) {
         try {
           var b = bridge();
           if (b && b.showToast) {
-            b.showToast('Song not downloaded for offline playback. Play your saved songs from Library!');
+            b.showToast('Song is not saved offline. Open Library to listen to your saved songs!');
           }
         } catch(e) {}
       }
@@ -178,182 +250,132 @@
     if (!ms.__instaHookedActions) {
       try {
         var orig = ms.setActionHandler ? ms.setActionHandler.bind(ms) : null;
-        ms.setActionHandler = function(a, h) {
-          actions[a] = h;
-          try { if (orig) return orig(a, h); } catch(e) {}
-        };
-        ms.__instaHookedActions = true;
+        if (orig) {
+          ms.setActionHandler = function(action, handler) {
+            if (action) actions[action] = handler;
+            return orig(action, handler);
+          };
+          ms.__instaHookedActions = true;
+        }
       } catch(e) {}
     }
   }
+  hookMediaSession();
 
-  window.__triggerMediaAction = function(act) {
-    if (actions[act]) {
-      try { actions[act](); return; } catch(e) {}
+  window.__triggerMediaAction = function(action) {
+    hookMediaSession();
+    var fn = actions[action];
+    if (typeof fn === 'function') {
+      try { fn({ action: action }); return; } catch(e) {}
     }
-    audioElements.forEach(function(a) {
-      try {
-        if (act === 'play') a.play();
-        else if (act === 'pause') a.pause();
-      } catch(e) {}
-    });
+    var audios = Array.from(audioElements).filter(function(a) { return a && !a.ended; });
+    var playing = audios.find(function(a) { return !a.paused; });
+    var target = playing || audios[0] || document.querySelector('audio');
+    if (!target) return;
+    try {
+      if (action === 'play') target.play();
+      else if (action === 'pause') target.pause();
+      else if (action === 'stop') { target.pause(); target.currentTime = 0; }
+    } catch(e) {}
   };
 
-  function getArt(meta) {
-    if (!meta || !meta.artwork || !meta.artwork.length) return '';
-    var item = meta.artwork[meta.artwork.length - 1];
-    return item && item.src ? item.src : '';
+  function findPlayingAudio() {
+    for (var a of audioElements) {
+      if (a && !a.paused && !a.ended) return a;
+    }
+    var domAudios = document.querySelectorAll('audio');
+    for (var i = 0; i < domAudios.length; i++) {
+      var d = domAudios[i];
+      addAudio(d);
+      if (!d.paused && !d.ended) return d;
+    }
+    for (var b of audioElements) {
+      if (b && !b.ended) return b;
+    }
+    return domAudios[0] || null;
   }
 
-  function extractFromStorage(audio) {
+  function getActiveTrackFromDom() {
     try {
-      var currentId = (audio && audio.dataset && audio.dataset.id) ? audio.dataset.id : null;
-      if (!currentId) {
-        var demoRaw = localStorage.getItem('insta-music-demo-v1');
-        if (demoRaw) {
-          var demo = JSON.parse(demoRaw);
-          if (demo && demo.player && demo.player.currentId) {
-            currentId = demo.player.currentId;
-          }
-        }
+      var player = document.querySelector('[data-mini-player], [data-now-playing], footer, [class*="now-playing"], [class*="player"]');
+      if (player) {
+        var titleEl = player.querySelector('h1, h2, h3, h4, [class*="title"], [class*="song"]');
+        var artistEl = player.querySelector('p, span, [class*="artist"], [class*="creator"]');
+        var imgEl = player.querySelector('img');
+        var t = titleEl ? (titleEl.textContent || '').trim() : '';
+        var ar = artistEl ? (artistEl.textContent || '').trim() : '';
+        var img = imgEl ? (imgEl.src || '') : '';
+        if (t) return { title: t, artist: ar || 'InstaMusic', album: 'INSTA MUSIC', artwork: img };
       }
-      var liveRaw = localStorage.getItem('insta-music-live-tracks-v1');
-      if (!liveRaw) return null;
-      var live = JSON.parse(liveRaw);
-      var songs = (live && live.s) || [];
-      var artists = (live && live.a) || [];
-      var song = null;
-      if (currentId) {
-        song = songs.find(function(it){ return it && it.id === currentId; });
-      }
-      if (!song && audio && audio.src) {
-        song = songs.find(function(it){ return it && (it.src === audio.src || it.src === audio.currentSrc); });
-      }
-      if (!song) return currentId ? { id: String(currentId), title: '', artist: '', cover: '', album: 'INSTA MUSIC' } : null;
-      var artistObj = artists.find(function(it){ return it && it.id === song.artistId; });
-      var artistName = artistObj ? artistObj.name : '';
-      return {
-        id: String(song.id || currentId || ''),
-        title: song.title || '',
-        artist: artistName || song.artist || '',
-        cover: song.cover || song.artwork || '',
-        album: song.album || 'INSTA MUSIC'
-      };
-    } catch(e) {
-      return null;
-    }
-  }
-
-  function extractFromMiniPlayer() {
-    var btn = document.querySelector('button[aria-label="Open Now Playing"]');
-    if (!btn) return null;
-    var img = btn.querySelector('img');
-    var cover = img ? (img.currentSrc || img.src || '') : '';
-    var spans = btn.querySelectorAll('span');
-    var texts = [];
-    for (var i = 0; i < spans.length; i++) {
-      var s = spans[i];
-      if (s.children.length === 0) {
-        var t = (s.innerText || s.textContent || '').trim();
-        if (t) texts.push(t);
-      }
-    }
-    if (texts.length >= 1) {
-      return {
-        title: texts[0],
-        artist: texts.length > 1 ? texts[1] : '',
-        cover: cover,
-        album: 'INSTA MUSIC'
-      };
-    }
+    } catch(e) {}
     return null;
   }
 
-  function extractFromFullPlayer() {
-    var h1 = document.querySelector('h1');
-    if (!h1) return null;
-    var title = (h1.innerText || h1.textContent || '').trim();
-    if (!title || title.length > 100) return null;
-    var artistLink = document.querySelector('a[href*="/artist/"]');
-    var artist = artistLink ? (artistLink.innerText || artistLink.textContent || '').trim() : '';
-    var img = document.querySelector('img.aspect-square');
-    var cover = img ? (img.currentSrc || img.src || '') : '';
-    return {
-      title: title,
-      artist: artist,
-      cover: cover,
-      album: 'INSTA MUSIC'
-    };
+  function getActiveTrackFromStore() {
+    try {
+      var keys = ['insta-music-demo-v1', 'insta-music-live-tracks-v1', 'instamusic_state', 'music-store'];
+      for (var k of keys) {
+        var raw = localStorage.getItem(k);
+        if (raw) {
+          var data = JSON.parse(raw);
+          var activeId = data.activeId || data.currentSongId || (data.queue && data.queue[data.queueIndex]);
+          var songs = data.songs || data.tracks || [];
+          if (activeId && Array.isArray(songs)) {
+            var found = songs.find(function(s) { return s.id === activeId; });
+            if (found) {
+              return {
+                title: found.title || found.name || '',
+                artist: found.artist || found.creator || '',
+                album: found.album || 'INSTA MUSIC',
+                artwork: found.artwork || found.cover || found.image || ''
+              };
+            }
+          }
+        }
+      }
+    } catch(e) {}
+    return null;
   }
 
   function sync() {
-    hookMediaSession();
-    var audios = document.getElementsByTagName('audio');
-    for (var i = 0; i < audios.length; i++) addAudio(audios[i]);
+    var audio = findPlayingAudio();
+    var isPlaying = !!(audio && !audio.paused && !audio.ended);
+    reportInfo(audio, false);
 
-    var active = null;
-    audioElements.forEach(function(a) {
-      if (!active || (!a.paused && !a.ended)) active = a;
-    });
-
-    var playing = navigator.mediaSession
-      ? (navigator.mediaSession.playbackState === 'playing' || !!(active && !active.paused && !active.ended))
-      : !!(active && !active.paused && !active.ended);
-
-    var meta = null;
-    meta = extractFromStorage(active);
-
-    if (!meta || !meta.title) {
-      if (navigator.mediaSession && navigator.mediaSession.metadata) {
-        var m = navigator.mediaSession.metadata;
-        if (m && m.title && m.title !== 'INSTA MUSIC') {
-          meta = { id: '', title: m.title, artist: m.artist || '', album: m.album || 'INSTA MUSIC', cover: getArt(m) };
-        }
+    var ms = navigator.mediaSession;
+    var meta = ms && ms.metadata;
+    if (meta && (meta.title || meta.artist)) {
+      var art = '';
+      if (meta.artwork && meta.artwork.length) {
+        var last = meta.artwork[meta.artwork.length - 1];
+        art = (last && last.src) ? last.src : '';
       }
+      reportMeta(meta.title, meta.artist, meta.album || 'INSTA MUSIC', art, isPlaying, 'ms:' + meta.title + ':' + meta.artist);
+      return;
     }
 
-    if (!meta || !meta.title) {
-      meta = extractFromMiniPlayer();
+    var fromDom = getActiveTrackFromDom();
+    if (fromDom && fromDom.title) {
+      reportMeta(fromDom.title, fromDom.artist, fromDom.album, fromDom.artwork, isPlaying, 'dom:' + fromDom.title);
+      return;
     }
 
-    if (!meta || !meta.title) {
-      meta = extractFromFullPlayer();
+    var fromStore = getActiveTrackFromStore();
+    if (fromStore && fromStore.title) {
+      reportMeta(fromStore.title, fromStore.artist, fromStore.album, fromStore.artwork, isPlaying, 'store:' + fromStore.title);
+      return;
     }
 
-    if (meta && meta.title && meta.title.trim()) {
-      reportMeta(meta.title, meta.artist, meta.album || 'INSTA MUSIC', meta.cover || '', playing, meta.id || '');
-    } else if (meta && meta.id && meta.id !== lastIdentity) {
-      reportMeta('', '', 'INSTA MUSIC', '', playing, meta.id, true);
+    if (isPlaying) {
+      reportMeta('INSTA MUSIC', 'Streaming', 'INSTA MUSIC', '', true, 'fallback', false);
     }
-
-    if (active) reportInfo(active, false);
   }
 
-  try {
-    ['pushState', 'replaceState'].forEach(function(name) {
-      var original = history[name];
-      if (typeof original !== 'function' || original.__instaWrapped) return;
-      var wrapped = function() {
-        var result = original.apply(this, arguments);
-        scheduleSync();
-        return result;
-      };
-      wrapped.__instaWrapped = true;
-      history[name] = wrapped;
-    });
-    window.addEventListener('popstate', scheduleSync);
-    window.addEventListener('hashchange', scheduleSync);
-    window.addEventListener('pageshow', scheduleSync);
-    window.addEventListener('focus', scheduleSync);
-    document.addEventListener('visibilitychange', scheduleSync);
-    if (window.MutationObserver && document.documentElement) {
-      var observer = new MutationObserver(scheduleSync);
-      observer.observe(document.documentElement, {subtree:true, childList:true, characterData:true, attributes:true, attributeFilter:['src','data-id','aria-label']});
-    }
-  } catch(e) {}
+  var observer = new MutationObserver(function() { scheduleSync(); });
+  if (document.body) observer.observe(document.body, { childList: true, subtree: true, attributes: false });
+  else document.addEventListener('DOMContentLoaded', function() {
+    if (document.body) observer.observe(document.body, { childList: true, subtree: true, attributes: false });
+  });
 
-  sync();
-  setInterval(function() {
-    try { sync(); } catch(e) {}
-  }, 400);
+  setInterval(sync, 1000);
 })();

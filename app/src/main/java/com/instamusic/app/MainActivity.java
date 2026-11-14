@@ -292,7 +292,7 @@ public class MainActivity extends Activity {
             @Override
             public void onReceivedError(WebView v, WebResourceRequest req, WebResourceError err) {
                 if (req.isForMainFrame()) {
-                    if (!OfflineCacheManager.isNetworkAvailable(MainActivity.this) && OfflineCacheManager.hasCachedShell(MainActivity.this)) {
+                    if (OfflineCacheManager.hasCachedShell(MainActivity.this)) {
                         v.post(() -> {
                             errorLayout.setVisibility(View.GONE);
                             appView.setVisibility(View.VISIBLE);
