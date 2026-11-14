@@ -38,7 +38,7 @@ jobs:
             "versionCode": ${{ github.run_number }},
             "versionName": "1.0.${{ github.run_number }}",
             "apkUrl": "https://github.com/rapar5201-oss/InstaMusic-Android/releases/download/latest-apk/app-release.apk",
-            "releaseNotes": "Professional Spotify-style offline mode status pill (no emojis), live animated network speed & quality indicator (e.g. 51% Good internet) with smooth drop animations, and in-app updates."
+            "releaseNotes": "Movable network quality indicator (drag to place anywhere, long-press to dismiss until restart), luxury Spotify-style offline pill with smooth swag entrance and exit, enhanced accessibility (ARIA roles and live regions), and in-app updates."
           }
           EOF
 
@@ -56,7 +56,7 @@ jobs:
         with:
           tag_name: latest-apk
           name: InstaMusic latest APK (v1.0.${{ github.run_number }})
-          body: "Installable InstaMusic Android app with professional Spotify-style offline mode status pill (no emojis), real-time animated network speed & quality indicator (e.g. 51% Good internet), full local route bundling, Home & Library saved music playback, and in-app APK updates."
+          body: "Installable InstaMusic Android app with movable network quality indicator (drag and place anywhere on screen, long-press to dismiss until app restart), luxury Spotify-style offline pill with smooth swag entrance and exit, enhanced accessibility, and in-app APK updates."
           files: |
             app/build/outputs/apk/release/app-release.apk
             app/build/outputs/apk/debug/app-debug.apk
