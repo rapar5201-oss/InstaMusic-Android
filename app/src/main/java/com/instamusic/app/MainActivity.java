@@ -224,6 +224,7 @@ public class MainActivity extends Activity {
         if (intent != null && intent.getBooleanExtra(UpdateManager.EXTRA_CHECK_UPDATE, false)) {
             UpdateManager.checkForUpdates(this, true);
         }
+        handleReminderIntent(intent);
     }
 
     @Override
@@ -369,13 +370,6 @@ public class MainActivity extends Activity {
             lastBackPressed = now;
             Toast.makeText(this, "Press back again to exit", Toast.LENGTH_SHORT).show();
         }
-    }
-
-    @Override
-    protected void onNewIntent(Intent intent) {
-        super.onNewIntent(intent);
-        setIntent(intent);
-        handleReminderIntent(intent);
     }
 
     private void handleReminderIntent(Intent intent) {
