@@ -30,6 +30,7 @@ import android.widget.LinearLayout;
 import android.widget.Toast;
 
 public class MainActivity extends Activity {
+    public static volatile boolean isAppInForeground = false;
     private static final String APP_URL = "https://instamusic.lovable.app";
     private static final long BACK_EXIT_MS = 2000;
     private static final int PERMISSION_REQ_NOTIFICATIONS = 1001;
@@ -65,6 +66,9 @@ public class MainActivity extends Activity {
                 intent.putExtra(MusicPlaybackService.EXTRA_ARTWORK_URL, artworkUrl);
                 intent.putExtra(MusicPlaybackService.EXTRA_IS_PLAYING, isPlaying);
                 startPlaybackService(intent);
+                if (isPlaying && title != null && !title.trim().isEmpty() && !title.equalsIgnoreCase("INSTA MUSIC")) {
+                    MusicHistoryDbHelper.getInstance(MainActivity.this).recordTrackPlayed(title, artist, album, artworkUrl);
+                }
             });
         }
 
@@ -92,6 +96,10 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public void triggerTestReminder() {
+            handler.post(() -> MusicReminderScheduler.triggerReminder(MainActivity.this));
+        }
+
         public void showToast(String message) {
             handler.post(() -> Toast.makeText(MainActivity.this, message, Toast.LENGTH_SHORT).show());
         }
@@ -156,6 +164,7 @@ public class MainActivity extends Activity {
     @Override
     public void onCreate(Bundle state) {
         super.onCreate(state);
+        MusicReminderScheduler.schedulePeriodicReminders(this);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         Window w = getWindow();
         w.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
@@ -364,6 +373,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        isAppInForeground = true;
         if (appView != null) appView.onResume();
         UpdateManager.checkPendingInstallOnResume(this);
     }
@@ -371,6 +381,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onPause() {
         super.onPause();
+        isAppInForeground = false;
     }
 
     @Override

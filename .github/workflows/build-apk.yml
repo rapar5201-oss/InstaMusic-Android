@@ -38,7 +38,7 @@ jobs:
             "versionCode": ${{ github.run_number }},
             "versionName": "1.0.${{ github.run_number }}",
             "apkUrl": "https://github.com/rapar5201-oss/InstaMusic-Android/releases/download/latest-apk/app-release.apk",
-            "releaseNotes": "Movable network quality indicator (drag to place anywhere, long-press to dismiss until restart), luxury Spotify-style offline pill with smooth swag entrance and exit, enhanced accessibility (ARIA roles and live regions), and in-app updates."
+            "releaseNotes": "Automatic smart music engagement push notifications: Remembers played songs in a local database and sends stylish reminders (e.g. 'Your song is missing you', 'Resume [Track]') when inactive, with movable network indicator and in-app updates."
           }
           EOF
 
@@ -56,7 +56,7 @@ jobs:
         with:
           tag_name: latest-apk
           name: InstaMusic latest APK (v1.0.${{ github.run_number }})
-          body: "Installable InstaMusic Android app with movable network quality indicator (drag and place anywhere on screen, long-press to dismiss until app restart), luxury Spotify-style offline pill with smooth swag entrance and exit, enhanced accessibility, and in-app APK updates."
+          body: "Installable InstaMusic Android app with automatic smart music engagement push notifications (remembers played songs in SQLite database, sends stylish reminders like 'Your song is missing you' when away), movable network indicator, and in-app APK updates."
           files: |
             app/build/outputs/apk/release/app-release.apk
             app/build/outputs/apk/debug/app-debug.apk

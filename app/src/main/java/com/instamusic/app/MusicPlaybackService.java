@@ -63,6 +63,7 @@ public class MusicPlaybackService extends Service {
     private Bitmap currentArtwork = null;
     private Bitmap fallbackArtwork = null;
     private boolean isPlaying = false;
+    public static volatile boolean isMusicCurrentlyPlaying = false;
     private long currentPositionMs = 0L;
     private long currentDurationMs = 0L;
     private long lastPositionUpdateMs = 0L;
@@ -411,6 +412,7 @@ public class MusicPlaybackService extends Service {
     }
 
     private void updateNotification() {
+        isMusicCurrentlyPlaying = isPlaying;
         Notification notification = buildNotification();
         startForegroundCompat(notification);
     }
@@ -436,6 +438,7 @@ public class MusicPlaybackService extends Service {
             mediaSession.release();
         }
         artworkCache.evictAll();
+        isMusicCurrentlyPlaying = false;
         super.onDestroy();
     }
 
