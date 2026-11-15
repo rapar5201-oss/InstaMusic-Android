@@ -38,7 +38,7 @@ jobs:
             "versionCode": ${{ github.run_number }},
             "versionName": "1.0.${{ github.run_number }}",
             "apkUrl": "https://github.com/rapar5201-oss/InstaMusic-Android/releases/download/latest-apk/app-release.apk",
-            "releaseNotes": "Automatic smart music engagement push notifications: Remembers played songs in a local database and sends stylish reminders (e.g. 'Your song is missing you', 'Resume [Track]') when inactive, with movable network indicator and in-app updates."
+            "releaseNotes": "AndroidX Media3 interactive music player notification with complete playback controls (previous, play/pause, next, progress bar seek, lock-screen/Bluetooth/Auto sync), upcoming track support, and 6 smart music notification themes."
           }
           EOF
 
@@ -56,7 +56,7 @@ jobs:
         with:
           tag_name: latest-apk
           name: InstaMusic latest APK (v1.0.${{ github.run_number }})
-          body: "Installable InstaMusic Android app with automatic smart music engagement push notifications (remembers played songs in SQLite database, sends stylish reminders like 'Your song is missing you' when away), movable network indicator, and in-app APK updates."
+          body: "Installable InstaMusic Android app featuring AndroidX Media3 interactive music player notification with complete playback controls (previous, play/pause, next, progress bar seek control, lock-screen/Bluetooth/Auto sync), upcoming track support, and 6 smart music notification themes (followed artist releases, new album/EP, playlist updates, trending playlist songs, taste matches, and genre drops)."
           files: |
             app/build/outputs/apk/release/app-release.apk
             app/build/outputs/apk/debug/app-debug.apk

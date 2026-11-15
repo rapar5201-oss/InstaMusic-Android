@@ -56,6 +56,11 @@ public class MainActivity extends Activity {
     public class MediaBridge {
         @JavascriptInterface
         public void updateMetadata(String title, String artist, String album, String artworkUrl, boolean isPlaying) {
+            updateMetadataWithUpcoming(title, artist, album, artworkUrl, isPlaying, null, null);
+        }
+
+        @JavascriptInterface
+        public void updateMetadataWithUpcoming(String title, String artist, String album, String artworkUrl, boolean isPlaying, String upcomingTitle, String upcomingArtist) {
             handler.post(() -> {
                 checkAndRequestNotificationPermission();
                 Intent intent = new Intent(MainActivity.this, MusicPlaybackService.class);
@@ -65,6 +70,12 @@ public class MainActivity extends Activity {
                 intent.putExtra(MusicPlaybackService.EXTRA_ALBUM, album);
                 intent.putExtra(MusicPlaybackService.EXTRA_ARTWORK_URL, artworkUrl);
                 intent.putExtra(MusicPlaybackService.EXTRA_IS_PLAYING, isPlaying);
+                if (upcomingTitle != null && !upcomingTitle.trim().isEmpty()) {
+                    intent.putExtra(MusicPlaybackService.EXTRA_UPCOMING_TITLE, upcomingTitle);
+                }
+                if (upcomingArtist != null && !upcomingArtist.trim().isEmpty()) {
+                    intent.putExtra(MusicPlaybackService.EXTRA_UPCOMING_ARTIST, upcomingArtist);
+                }
                 startPlaybackService(intent);
                 if (isPlaying && title != null && !title.trim().isEmpty() && !title.equalsIgnoreCase("INSTA MUSIC")) {
                     MusicHistoryDbHelper.getInstance(MainActivity.this).recordTrackPlayed(title, artist, album, artworkUrl);
@@ -128,9 +139,24 @@ public class MainActivity extends Activity {
                 triggerMediaAction("nexttrack");
             } else if (MusicPlaybackService.ACTION_PREV.equals(action)) {
                 triggerMediaAction("previoustrack");
+            } else if (MusicPlaybackService.ACTION_SEEK.equals(action)) {
+                long posMs = intent.getLongExtra(MusicPlaybackService.EXTRA_SEEK_POSITION_MS, 0L);
+                triggerSeekAction(posMs / 1000.0);
             }
         }
     };
+
+    private void triggerSeekAction(double seconds) {
+        if (appView == null) return;
+        appView.post(() -> {
+            String js = "(function(){"
+                + "if (window.__triggerMediaSeek) { window.__triggerMediaSeek(" + seconds + "); return; }"
+                + "var a = document.querySelector('audio');"
+                + "if (a && Number.isFinite(" + seconds + ")) a.currentTime = " + seconds + ";"
+                + "})()";
+            appView.evaluateJavascript(js, null);
+        });
+    }
 
     private void startPlaybackService(Intent intent) {
         try {
@@ -193,6 +219,7 @@ public class MainActivity extends Activity {
         filter.addAction(MusicPlaybackService.ACTION_PAUSE);
         filter.addAction(MusicPlaybackService.ACTION_NEXT);
         filter.addAction(MusicPlaybackService.ACTION_PREV);
+        filter.addAction(MusicPlaybackService.ACTION_SEEK);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(mediaActionReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
         } else {
@@ -377,9 +404,9 @@ public class MainActivity extends Activity {
         if (intent.getBooleanExtra("from_reminder", false)) {
             String trackTitle = intent.getStringExtra("resume_title");
             if (trackTitle != null && !trackTitle.trim().isEmpty()) {
-                Toast.makeText(this, "Resuming " + trackTitle + " 🎵", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "Resuming " + trackTitle, Toast.LENGTH_SHORT).show();
             } else {
-                Toast.makeText(this, "Welcome back to InstaMusic 🎵", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "Welcome back to InstaMusic", Toast.LENGTH_SHORT).show();
             }
         }
     }

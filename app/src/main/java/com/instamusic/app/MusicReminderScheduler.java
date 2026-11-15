@@ -30,11 +30,12 @@ public class MusicReminderScheduler {
     public static final String ACTION_CHECK_REMINDER = "com.instamusic.app.ACTION_CHECK_REMINDER";
     public static final String PREFS_NAME = "instamusic_reminder_prefs";
     public static final String KEY_LAST_REMINDER_TIME = "last_reminder_time";
+    public static final String KEY_LAST_CATEGORY_INDEX = "last_category_index";
     public static final int NOTIFICATION_ID = 202;
 
     // Interval: 30 minutes
     public static final long REMINDER_INTERVAL_MS = 30 * 60 * 1000L;
-    // Minimum cooldown between notifications: 20 minutes
+    // Minimum cooldown between notifications: 15 minutes
     public static final long MIN_COOLDOWN_MS = 15 * 60 * 1000L;
 
     private static final ExecutorService backgroundExecutor = Executors.newSingleThreadExecutor();
@@ -43,10 +44,10 @@ public class MusicReminderScheduler {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationChannel channel = new NotificationChannel(
                     CHANNEL_ID,
-                    "Music Reminders & Recommendations",
+                    "Music Releases & Recommendations",
                     NotificationManager.IMPORTANCE_DEFAULT
             );
-            channel.setDescription("Reminders when you have been away from your favorite music");
+            channel.setDescription("Releases from your followed artists, trending playlist tracks, and new music drops");
             channel.setShowBadge(true);
             channel.enableVibration(true);
             NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
@@ -98,7 +99,7 @@ public class MusicReminderScheduler {
             @Override
             public void run() {
                 try {
-                    // 2. Check if music is currently playing in foreground service
+                    // 2. Check if music is currently playing
                     if (MusicPlaybackService.isMusicCurrentlyPlaying) {
                         Log.d(TAG, "Music is currently playing; skipping reminder.");
                         return;
@@ -125,39 +126,78 @@ public class MusicReminderScheduler {
                         return;
                     }
 
-                    // 6. Fetch favorite or recent track from database
+                    // 6. Fetch favorite or recent track from local database
                     MusicHistoryDbHelper db = MusicHistoryDbHelper.getInstance(context);
                     MusicHistoryDbHelper.TrackInfo track = db.getFavoriteOrRecentTrack();
 
+                    String artist = (track != null && track.artist != null && !track.artist.trim().isEmpty() && !track.artist.equalsIgnoreCase("InstaMusic")) ? track.artist.trim() : null;
+                    String trackTitle = (track != null && track.title != null && !track.title.trim().isEmpty() && !track.title.equalsIgnoreCase("INSTA MUSIC")) ? track.title.trim() : null;
+
+                    // Rotate across all 6 awesome music notification categories
+                    int lastCategory = prefs.getInt(KEY_LAST_CATEGORY_INDEX, -1);
+                    int category = (lastCategory + 1) % 6;
+
                     String titleText;
                     String bodyText;
+                    String subText;
 
-                    int variant = (int) (Math.random() * 5);
-                    if (track != null && track.title != null && !track.title.isEmpty()) {
-                        if (variant == 0) {
-                            titleText = "Your song is missing you 🎵";
-                            bodyText = "Pick up where you left off with \"" + track.title + "\" by " + track.artist + ". Tap to play now.";
-                        } else if (variant == 1) {
-                            titleText = "Your waiting tracks are ready 🎶";
-                            bodyText = "Your queue and saved library have songs waiting for you. Tap to resume listening.";
-                        } else if (variant == 2) {
-                            titleText = "New tracks waiting on InstaMusic 🎧";
-                            bodyText = "Fresh mixes and trending charts are live. Tap to discover what's new today.";
-                        } else if (variant == 3) {
-                            titleText = "Time for your favorite vibe? ✨";
-                            bodyText = "Ready for another play of \"" + track.title + "\" by " + track.artist + "? Tap to turn it up.";
-                        } else {
-                            titleText = "Take a music break ⚡";
-                            bodyText = "Tune back into \"" + track.title + "\" or jump into your daily mixes.";
-                        }
-                    } else {
-                        if (variant % 2 == 0) {
-                            titleText = "Your waiting tracks are ready 🎶";
-                            bodyText = "Your queue and saved library have songs waiting for you. Tap to start listening.";
-                        } else {
-                            titleText = "New tracks waiting on InstaMusic 🎧";
-                            bodyText = "Fresh beats and trending playlists are live. Tap to hear what's playing today.";
-                        }
+                    switch (category) {
+                        case 0: // 1. Your followed artist released a song
+                            subText = "Followed Artist";
+                            if (artist != null) {
+                                titleText = "New Release from " + artist;
+                                bodyText = artist + " just released a brand new single. Stream it now on InstaMusic.";
+                            } else {
+                                titleText = "New Release from Your Followed Artists";
+                                bodyText = "A followed artist just dropped a new song. Tap to hear it first.";
+                            }
+                            break;
+
+                        case 1: // 2. A new album or EP is available
+                            subText = "Album Drop";
+                            if (artist != null) {
+                                titleText = "New Album Available from " + artist;
+                                bodyText = "The wait is over. " + artist + " released a brand new album. Listen to every track on InstaMusic.";
+                            } else {
+                                titleText = "A New Album or EP is Available";
+                                bodyText = "A brand new studio album and EP are now available. Tap to explore fresh tracks.";
+                            }
+                            break;
+
+                        case 2: // 3. Your favourite playlist was updated
+                            subText = "Playlist Update";
+                            titleText = "Your Favourite Playlist Was Updated";
+                            bodyText = "Fresh releases and hand-picked additions were added to your playlist. Check out what's new today.";
+                            break;
+
+                        case 3: // 4. A song in your playlist is trending
+                            subText = "Trending Track";
+                            if (trackTitle != null) {
+                                titleText = "Trending in Your Playlist";
+                                bodyText = "\"" + trackTitle + "\" by " + (artist != null ? artist : "InstaMusic") + " is climbing the charts today. Turn it up now.";
+                            } else {
+                                titleText = "A Song in Your Playlist is Trending";
+                                bodyText = "A popular track from your library is trending right now. Join other listeners today.";
+                            }
+                            break;
+
+                        case 4: // 5. A new song matches your music taste
+                            subText = "Taste Match";
+                            if (artist != null) {
+                                titleText = "A New Song Matches Your Music Taste";
+                                bodyText = "Based on your recent listening of " + artist + ", we found a new track curated for your sound.";
+                            } else {
+                                titleText = "A New Song Matches Your Music Taste";
+                                bodyText = "We found a brand new release tailored to your music taste. Tap to listen.";
+                            }
+                            break;
+
+                        case 5: // 6. A new release from your favourite language or genre
+                        default:
+                            subText = "Genre Release";
+                            titleText = "New Release in Your Favourite Genre";
+                            bodyText = "The hottest new drop from your favorite language and genre just landed on InstaMusic. Stream now.";
+                            break;
                     }
 
                     // 7. Load artwork for notification large icon
@@ -173,9 +213,10 @@ public class MusicReminderScheduler {
                     Intent openIntent = new Intent(context, MainActivity.class);
                     openIntent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
                     openIntent.putExtra("from_reminder", true);
-                    if (track != null && track.title != null) {
-                        openIntent.putExtra("resume_title", track.title);
-                        openIntent.putExtra("resume_artist", track.artist);
+                    openIntent.putExtra("notification_category", category);
+                    if (trackTitle != null) {
+                        openIntent.putExtra("resume_title", trackTitle);
+                        openIntent.putExtra("resume_artist", artist != null ? artist : "");
                     }
 
                     int flags = PendingIntent.FLAG_UPDATE_CURRENT;
@@ -190,12 +231,14 @@ public class MusicReminderScheduler {
                             .setColor(0xFFFF5722)
                             .setContentTitle(titleText)
                             .setContentText(bodyText)
+                            .setSubText(subText)
                             .setStyle(new NotificationCompat.BigTextStyle()
                                     .bigText(bodyText)
-                                    .setSummaryText("InstaMusic Reminder"))
+                                    .setSummaryText("InstaMusic • " + subText))
                             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
                             .setAutoCancel(true)
-                            .setContentIntent(pendingIntent);
+                            .setContentIntent(pendingIntent)
+                            .addAction(R.drawable.ic_play, "Listen Now", pendingIntent);
 
                     if (largeIcon != null) {
                         builder.setLargeIcon(largeIcon);
@@ -205,8 +248,11 @@ public class MusicReminderScheduler {
                     if (nm != null) {
                         createNotificationChannel(context);
                         nm.notify(NOTIFICATION_ID, builder.build());
-                        prefs.edit().putLong(KEY_LAST_REMINDER_TIME, now).apply();
-                        Log.d(TAG, "Successfully posted reminder notification: " + titleText);
+                        prefs.edit()
+                                .putLong(KEY_LAST_REMINDER_TIME, now)
+                                .putInt(KEY_LAST_CATEGORY_INDEX, category)
+                                .apply();
+                        Log.d(TAG, "Successfully posted music notification [" + subText + "]: " + titleText);
                     }
                 } catch (Exception e) {
                     Log.e(TAG, "Error triggering reminder: " + e.getMessage(), e);

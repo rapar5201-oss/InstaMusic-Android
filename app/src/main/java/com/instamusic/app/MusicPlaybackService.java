@@ -1,31 +1,46 @@
 package com.instamusic.app;
 
-import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
-import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
-import android.content.pm.ServiceInfo;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Paint;
-import android.media.MediaMetadata;
-import android.media.session.MediaSession;
-import android.media.session.PlaybackState;
 import android.os.Build;
 import android.os.Handler;
-import android.os.IBinder;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.util.LruCache;
 
+import androidx.annotation.Nullable;
+import androidx.annotation.OptIn;
+import androidx.media3.common.C;
+import androidx.media3.common.MediaItem;
+import androidx.media3.common.MediaMetadata;
+import androidx.media3.common.Player;
+import androidx.media3.common.Player.Commands;
+import androidx.media3.common.SimpleBasePlayer;
+import androidx.media3.common.Tracks;
+import androidx.media3.common.util.UnstableApi;
+import androidx.media3.session.DefaultMediaNotificationProvider;
+import androidx.media3.session.MediaSession;
+import androidx.media3.session.MediaSessionService;
+
+import com.google.common.util.concurrent.Futures;
+import com.google.common.util.concurrent.ListenableFuture;
+
+import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.ArrayList;
+import java.util.List;
 
-public class MusicPlaybackService extends Service {
+@OptIn(markerClass = UnstableApi.class)
+public class MusicPlaybackService extends MediaSessionService {
     public static final String CHANNEL_ID = "instamusic_playback";
     public static final int NOTIFICATION_ID = 101;
 
@@ -38,54 +53,233 @@ public class MusicPlaybackService extends Service {
     public static final String ACTION_PAUSE = "com.instamusic.app.PAUSE";
     public static final String ACTION_PREV = "com.instamusic.app.PREV";
     public static final String ACTION_NEXT = "com.instamusic.app.NEXT";
+    public static final String ACTION_SEEK = "com.instamusic.app.SEEK";
 
     public static final String EXTRA_TITLE = "title";
     public static final String EXTRA_ARTIST = "artist";
     public static final String EXTRA_ALBUM = "album";
     public static final String EXTRA_ARTWORK_URL = "artwork_url";
+    public static final String EXTRA_UPCOMING_TITLE = "upcoming_title";
+    public static final String EXTRA_UPCOMING_ARTIST = "upcoming_artist";
     public static final String EXTRA_IS_PLAYING = "is_playing";
     public static final String EXTRA_POSITION_MS = "position_ms";
     public static final String EXTRA_DURATION_MS = "duration_ms";
+    public static final String EXTRA_SEEK_POSITION_MS = "seek_position_ms";
 
     private static final int MAX_CACHE_ENTRIES = 30;
-    private final LruCache<String, Bitmap> artworkCache = new LruCache<String, Bitmap>(MAX_CACHE_ENTRIES) {
+    private final LruCache<String, byte[]> artworkDataCache = new LruCache<String, byte[]>(MAX_CACHE_ENTRIES) {
         @Override
-        protected int sizeOf(String key, Bitmap bitmap) {
+        protected int sizeOf(String key, byte[] bytes) {
             return 1;
         }
     };
 
     private MediaSession mediaSession;
+    private InstaMusicPlayer customPlayer;
+
     private String currentTitle = "INSTA MUSIC";
     private String currentArtist = "Playing";
     private String currentAlbum = "INSTA MUSIC";
     private String currentArtworkUrl = "";
-    private Bitmap currentArtwork = null;
-    private Bitmap fallbackArtwork = null;
+    private byte[] currentArtworkData = null;
+    private byte[] fallbackArtworkData = null;
+    private String upcomingTitle = "";
+    private String upcomingArtist = "";
+
     private boolean isPlaying = false;
     public static volatile boolean isMusicCurrentlyPlaying = false;
     private long currentPositionMs = 0L;
     private long currentDurationMs = 0L;
     private long lastPositionUpdateMs = 0L;
+
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
+
+    private final class InstaMusicPlayer extends SimpleBasePlayer {
+        public InstaMusicPlayer(Looper looper) {
+            super(looper);
+        }
+
+        @Override
+        protected State getState() {
+            Commands commands = new Commands.Builder()
+                .add(Player.COMMAND_PLAY_PAUSE)
+                .add(Player.COMMAND_SEEK_TO_NEXT)
+                .add(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
+                .add(Player.COMMAND_SEEK_TO_PREVIOUS)
+                .add(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
+                .add(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM)
+                .add(Player.COMMAND_SEEK_TO_MEDIA_ITEM)
+                .add(Player.COMMAND_STOP)
+                .add(Player.COMMAND_GET_CURRENT_MEDIA_ITEM)
+                .add(Player.COMMAND_GET_TIMELINE)
+                .add(Player.COMMAND_GET_METADATA)
+                .build();
+
+            MediaMetadata.Builder metaBuilder = new MediaMetadata.Builder()
+                .setTitle(currentTitle)
+                .setArtist(currentArtist)
+                .setAlbumTitle(currentAlbum)
+                .setDisplayTitle(currentTitle);
+
+            byte[] art = currentArtworkData != null ? currentArtworkData : fallbackArtworkData;
+            if (art != null) {
+                metaBuilder.setArtworkData(art, MediaMetadata.PICTURE_TYPE_FRONT_COVER);
+            }
+
+            MediaItem currentItem = new MediaItem.Builder()
+                .setMediaId("instamusic_current_track")
+                .setMediaMetadata(metaBuilder.build())
+                .build();
+
+            long durUs = currentDurationMs > 0L ? currentDurationMs * 1000L : C.TIME_UNSET;
+            SimpleBasePlayer.MediaItemData currentData = new SimpleBasePlayer.MediaItemData.Builder("instamusic_current_track")
+                .setMediaItem(currentItem)
+                .setTracks(Tracks.EMPTY)
+                .setDurationUs(durUs)
+                .setIsSeekable(currentDurationMs > 0L)
+                .build();
+
+            List<SimpleBasePlayer.MediaItemData> playlist = new ArrayList<>();
+            playlist.add(currentData);
+
+            if (upcomingTitle != null && !upcomingTitle.trim().isEmpty()) {
+                MediaMetadata nextMeta = new MediaMetadata.Builder()
+                    .setTitle(upcomingTitle)
+                    .setArtist(upcomingArtist != null && !upcomingArtist.trim().isEmpty() ? upcomingArtist : currentArtist)
+                    .setAlbumTitle(currentAlbum)
+                    .setDisplayTitle(upcomingTitle)
+                    .build();
+
+                MediaItem nextItem = new MediaItem.Builder()
+                    .setMediaId("instamusic_next_track")
+                    .setMediaMetadata(nextMeta)
+                    .build();
+
+                SimpleBasePlayer.MediaItemData nextData = new SimpleBasePlayer.MediaItemData.Builder("instamusic_next_track")
+                    .setMediaItem(nextItem)
+                    .setTracks(Tracks.EMPTY)
+                    .setIsSeekable(true)
+                    .build();
+
+                playlist.add(nextData);
+            }
+
+            return new State.Builder()
+                .setAvailableCommands(commands)
+                .setPlayWhenReady(isPlaying, Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST)
+                .setPlaybackState(isPlaying ? Player.STATE_READY : Player.STATE_IDLE)
+                .setPlaylist(playlist)
+                .setCurrentMediaItemIndex(0)
+                .setContentPositionMs(() -> {
+                    if (isPlaying && lastPositionUpdateMs > 0L) {
+                        long elapsed = SystemClock.elapsedRealtime() - lastPositionUpdateMs;
+                        long pos = currentPositionMs + elapsed;
+                        return currentDurationMs > 0L ? Math.min(pos, currentDurationMs) : pos;
+                    }
+                    return currentPositionMs;
+                })
+                .build();
+        }
+
+        @Override
+        protected ListenableFuture<?> handleSetPlayWhenReady(boolean playWhenReady) {
+            isPlaying = playWhenReady;
+            isMusicCurrentlyPlaying = isPlaying;
+            sendActionToApp(playWhenReady ? ACTION_PLAY : ACTION_PAUSE);
+            return Futures.immediateVoidFuture();
+        }
+
+        @Override
+        protected ListenableFuture<?> handleSeek(int mediaItemIndex, long positionMs, int seekCommand) {
+            if (seekCommand == Player.COMMAND_SEEK_TO_NEXT || seekCommand == Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM) {
+                sendActionToApp(ACTION_NEXT);
+            } else if (seekCommand == Player.COMMAND_SEEK_TO_PREVIOUS || seekCommand == Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM) {
+                sendActionToApp(ACTION_PREV);
+            } else if (seekCommand == Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM || seekCommand == Player.COMMAND_SEEK_TO_MEDIA_ITEM) {
+                sendSeekToApp(positionMs);
+                currentPositionMs = positionMs;
+                lastPositionUpdateMs = SystemClock.elapsedRealtime();
+            }
+            return Futures.immediateVoidFuture();
+        }
+
+        @Override
+        protected ListenableFuture<?> handleStop() {
+            isPlaying = false;
+            isMusicCurrentlyPlaying = false;
+            sendActionToApp(ACTION_PAUSE);
+            return Futures.immediateVoidFuture();
+        }
+    }
 
     @Override
     public void onCreate() {
         super.onCreate();
         createNotificationChannel();
-        initMediaSession();
-        fallbackArtwork = createFallbackArtwork();
-        currentArtwork = fallbackArtwork;
+        fallbackArtworkData = createFallbackArtworkBytes();
+        currentArtworkData = fallbackArtworkData;
 
-        Notification initialNotification = buildNotification();
-        startForegroundCompat(initialNotification);
+        customPlayer = new InstaMusicPlayer(Looper.getMainLooper());
+
+        Intent openAppIntent = new Intent(this, MainActivity.class);
+        openAppIntent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        PendingIntent pOpenApp = PendingIntent.getActivity(
+            this, 0, openAppIntent,
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0
+        );
+
+        mediaSession = new MediaSession.Builder(this, customPlayer)
+            .setSessionActivity(pOpenApp)
+            .build();
+
+        DefaultMediaNotificationProvider notificationProvider = new DefaultMediaNotificationProvider.Builder(this)
+            .setChannelId(CHANNEL_ID)
+            .setNotificationId(NOTIFICATION_ID)
+            .build();
+        notificationProvider.setSmallIcon(R.drawable.ic_music_note);
+        setMediaNotificationProvider(notificationProvider);
     }
 
-    private Bitmap createFallbackArtwork() {
+    @Nullable
+    @Override
+    public MediaSession onGetSession(MediaSession.ControllerInfo controllerInfo) {
+        return mediaSession;
+    }
+
+    private void requestPlayerStateUpdate() {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            if (customPlayer != null) customPlayer.invalidateState();
+        } else {
+            mainHandler.post(() -> {
+                if (customPlayer != null) customPlayer.invalidateState();
+            });
+        }
+    }
+
+    private void createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            NotificationChannel channel = new NotificationChannel(
+                CHANNEL_ID,
+                "Music Playback",
+                NotificationManager.IMPORTANCE_LOW
+            );
+            channel.setDescription("InstaMusic playback controls and media notification");
+            channel.setShowBadge(false);
+            channel.setLockscreenVisibility(android.app.Notification.VISIBILITY_PUBLIC);
+            channel.enableVibration(false);
+            channel.setSound(null, null);
+            NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            if (nm != null) {
+                nm.createNotificationChannel(channel);
+            }
+        }
+    }
+
+    private byte[] createFallbackArtworkBytes() {
         try {
             Bitmap icon = BitmapFactory.decodeResource(getResources(), R.mipmap.ic_launcher);
             if (icon != null) {
-                return icon;
+                return bitmapToByteArray(icon);
             }
         } catch (Exception ignored) {}
 
@@ -113,57 +307,17 @@ public class MusicPlaybackService extends Service {
             paint.setColor(0xFFFFFFFF);
             canvas.drawCircle(150, 150, 10, paint);
 
-            return bmp;
+            return bitmapToByteArray(bmp);
         } catch (Exception e) {
             return null;
         }
     }
 
-    private void createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            NotificationChannel channel = new NotificationChannel(
-                CHANNEL_ID,
-                "Music Playback",
-                NotificationManager.IMPORTANCE_LOW
-            );
-            channel.setDescription("InstaMusic playback controls and media notification");
-            channel.setShowBadge(false);
-            channel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
-            channel.enableVibration(false);
-            channel.setSound(null, null);
-            NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-            if (nm != null) {
-                nm.createNotificationChannel(channel);
-            }
-        }
-    }
-
-    private void initMediaSession() {
-        mediaSession = new MediaSession(this, "InstaMusicSession");
-        mediaSession.setCallback(new MediaSession.Callback() {
-            @Override
-            public void onPlay() {
-                sendActionToApp(ACTION_PLAY);
-            }
-            @Override
-            public void onPause() {
-                sendActionToApp(ACTION_PAUSE);
-            }
-            @Override
-            public void onSkipToNext() {
-                sendActionToApp(ACTION_NEXT);
-            }
-            @Override
-            public void onSkipToPrevious() {
-                sendActionToApp(ACTION_PREV);
-            }
-            @Override
-            public void onStop() {
-                stopForeground(true);
-                stopSelf();
-            }
-        });
-        mediaSession.setActive(true);
+    private static byte[] bitmapToByteArray(Bitmap bitmap) {
+        if (bitmap == null) return null;
+        ByteArrayOutputStream stream = new ByteArrayOutputStream();
+        bitmap.compress(Bitmap.CompressFormat.PNG, 90, stream);
+        return stream.toByteArray();
     }
 
     private void sendActionToApp(String action) {
@@ -172,10 +326,19 @@ public class MusicPlaybackService extends Service {
         sendBroadcast(intent);
     }
 
+    private void sendSeekToApp(long positionMs) {
+        Intent intent = new Intent(ACTION_SEEK);
+        intent.putExtra(EXTRA_SEEK_POSITION_MS, positionMs);
+        intent.setPackage(getPackageName());
+        sendBroadcast(intent);
+    }
+
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        super.onStartCommand(intent, flags, startId);
+
         if (intent == null || intent.getAction() == null) {
-            updateNotification();
+            requestPlayerStateUpdate();
             return START_STICKY;
         }
 
@@ -188,45 +351,56 @@ public class MusicPlaybackService extends Service {
             String newAlbum = intent.getStringExtra(EXTRA_ALBUM);
             if (newAlbum != null && !newAlbum.trim().isEmpty()) currentAlbum = newAlbum;
 
-            String newArtUrl = intent.getStringExtra(EXTRA_ARTWORK_URL);
+            String newUpcomingTitle = intent.getStringExtra(EXTRA_UPCOMING_TITLE);
+            upcomingTitle = newUpcomingTitle != null ? newUpcomingTitle.trim() : "";
+            String newUpcomingArtist = intent.getStringExtra(EXTRA_UPCOMING_ARTIST);
+            upcomingArtist = newUpcomingArtist != null ? newUpcomingArtist.trim() : "";
+
             if (intent.hasExtra(EXTRA_IS_PLAYING)) {
                 isPlaying = intent.getBooleanExtra(EXTRA_IS_PLAYING, true);
+                isMusicCurrentlyPlaying = isPlaying;
             }
 
+            String newArtUrl = intent.getStringExtra(EXTRA_ARTWORK_URL);
             if (newArtUrl != null && !newArtUrl.trim().isEmpty()) {
                 if (!newArtUrl.equals(currentArtworkUrl)) {
                     currentArtworkUrl = newArtUrl;
-                    // Switch to fallback immediately so the previous track's art never lingers.
-                    currentArtwork = fallbackArtwork;
+                    currentArtworkData = fallbackArtworkData;
                     loadArtworkWithCache(currentArtworkUrl);
                 }
             } else {
                 currentArtworkUrl = "";
-                currentArtwork = fallbackArtwork;
+                currentArtworkData = fallbackArtworkData;
             }
-            updateNotification();
+
+            requestPlayerStateUpdate();
         } else if (ACTION_UPDATE_STATE.equals(action)) {
             isPlaying = intent.getBooleanExtra(EXTRA_IS_PLAYING, false);
-            lastPositionUpdateMs = android.os.SystemClock.elapsedRealtime();
-            updateNotification();
+            isMusicCurrentlyPlaying = isPlaying;
+            lastPositionUpdateMs = SystemClock.elapsedRealtime();
+            requestPlayerStateUpdate();
         } else if (ACTION_UPDATE_POSITION.equals(action)) {
             currentPositionMs = Math.max(0L, intent.getLongExtra(EXTRA_POSITION_MS, currentPositionMs));
             currentDurationMs = Math.max(0L, intent.getLongExtra(EXTRA_DURATION_MS, currentDurationMs));
             isPlaying = intent.getBooleanExtra(EXTRA_IS_PLAYING, isPlaying);
-            lastPositionUpdateMs = android.os.SystemClock.elapsedRealtime();
-            updateNotification();
+            isMusicCurrentlyPlaying = isPlaying;
+            lastPositionUpdateMs = SystemClock.elapsedRealtime();
+            requestPlayerStateUpdate();
         } else if (ACTION_STOP.equals(action)) {
-            stopForeground(true);
+            isPlaying = false;
+            isMusicCurrentlyPlaying = false;
             stopSelf();
             return START_NOT_STICKY;
         } else if (ACTION_PLAY.equals(action)) {
             sendActionToApp(ACTION_PLAY);
             isPlaying = true;
-            updateNotification();
+            isMusicCurrentlyPlaying = true;
+            requestPlayerStateUpdate();
         } else if (ACTION_PAUSE.equals(action)) {
             sendActionToApp(ACTION_PAUSE);
             isPlaying = false;
-            updateNotification();
+            isMusicCurrentlyPlaying = false;
+            requestPlayerStateUpdate();
         } else if (ACTION_PREV.equals(action)) {
             sendActionToApp(ACTION_PREV);
         } else if (ACTION_NEXT.equals(action)) {
@@ -238,20 +412,16 @@ public class MusicPlaybackService extends Service {
 
     private void loadArtworkWithCache(final String urlStr) {
         if (urlStr == null || urlStr.trim().isEmpty()) {
-            currentArtwork = fallbackArtwork;
-            updateNotification();
+            currentArtworkData = fallbackArtworkData;
+            requestPlayerStateUpdate();
             return;
         }
 
-        Bitmap cached = artworkCache.get(urlStr);
+        byte[] cached = artworkDataCache.get(urlStr);
         if (cached != null) {
-            currentArtwork = cached;
-            updateNotification();
+            currentArtworkData = cached;
+            requestPlayerStateUpdate();
             return;
-        }
-
-        if (currentArtwork == null) {
-            currentArtwork = fallbackArtwork;
         }
 
         final String requestedUrl = urlStr;
@@ -288,16 +458,19 @@ public class MusicPlaybackService extends Service {
                         int targetH = Math.max(1, Math.round(h * ratio));
                         bmp = Bitmap.createScaledBitmap(bmp, targetW, targetH, true);
                     }
-                    artworkCache.put(requestedUrl, bmp);
-                    if (requestedUrl.equals(currentArtworkUrl)) {
-                        currentArtwork = bmp;
-                        mainHandler.post(this::updateNotification);
+                    byte[] data = bitmapToByteArray(bmp);
+                    if (data != null) {
+                        artworkDataCache.put(requestedUrl, data);
+                        if (requestedUrl.equals(currentArtworkUrl)) {
+                            currentArtworkData = data;
+                            requestPlayerStateUpdate();
+                        }
                     }
                 }
             } catch (Exception e) {
-                if (currentArtwork == null) {
-                    currentArtwork = fallbackArtwork;
-                    mainHandler.post(this::updateNotification);
+                if (currentArtworkData == null) {
+                    currentArtworkData = fallbackArtworkData;
+                    requestPlayerStateUpdate();
                 }
             } finally {
                 if (is != null) {
@@ -310,140 +483,18 @@ public class MusicPlaybackService extends Service {
         }).start();
     }
 
-    private Notification buildNotification() {
-        if (mediaSession != null) {
-            long actions = PlaybackState.ACTION_PLAY
-                | PlaybackState.ACTION_PAUSE
-                | PlaybackState.ACTION_SKIP_TO_NEXT
-                | PlaybackState.ACTION_SKIP_TO_PREVIOUS
-                | PlaybackState.ACTION_STOP;
-
-            int state = isPlaying ? PlaybackState.STATE_PLAYING : PlaybackState.STATE_PAUSED;
-            long position = currentPositionMs;
-            if (isPlaying && lastPositionUpdateMs > 0L) {
-                position += Math.max(0L, android.os.SystemClock.elapsedRealtime() - lastPositionUpdateMs);
-            }
-            if (currentDurationMs > 0L) position = Math.min(position, currentDurationMs);
-            PlaybackState.Builder stateBuilder = new PlaybackState.Builder()
-                .setActions(actions)
-                .setState(state, position, isPlaying ? 1.0f : 0.0f);
-            mediaSession.setPlaybackState(stateBuilder.build());
-
-            Bitmap artToUse = currentArtwork != null ? currentArtwork : fallbackArtwork;
-            MediaMetadata.Builder metaBuilder = new MediaMetadata.Builder()
-                .putString(MediaMetadata.METADATA_KEY_TITLE, currentTitle)
-                .putString(MediaMetadata.METADATA_KEY_ARTIST, currentArtist)
-                .putString(MediaMetadata.METADATA_KEY_ALBUM, currentAlbum);
-            if (currentDurationMs > 0L) {
-                metaBuilder.putLong(MediaMetadata.METADATA_KEY_DURATION, currentDurationMs);
-            }
-            if (artToUse != null) {
-                metaBuilder.putBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART, artToUse);
-                metaBuilder.putBitmap(MediaMetadata.METADATA_KEY_ART, artToUse);
-            }
-            mediaSession.setMetadata(metaBuilder.build());
-        }
-
-        Intent openAppIntent = new Intent(this, MainActivity.class);
-        openAppIntent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        PendingIntent pOpenApp = PendingIntent.getActivity(
-            this, 0, openAppIntent,
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0
-        );
-
-        PendingIntent pPrev = PendingIntent.getService(
-            this, 1, new Intent(this, MusicPlaybackService.class).setAction(ACTION_PREV),
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0
-        );
-
-        Intent playPauseIntent = new Intent(this, MusicPlaybackService.class)
-            .setAction(isPlaying ? ACTION_PAUSE : ACTION_PLAY);
-        PendingIntent pPlayPause = PendingIntent.getService(
-            this, 2, playPauseIntent,
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE : PendingIntent.FLAG_UPDATE_CURRENT
-        );
-
-        PendingIntent pNext = PendingIntent.getService(
-            this, 3, new Intent(this, MusicPlaybackService.class).setAction(ACTION_NEXT),
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0
-        );
-
-        Notification.Builder nb;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            nb = new Notification.Builder(this, CHANNEL_ID);
-        } else {
-            nb = new Notification.Builder(this);
-        }
-
-        Bitmap art = currentArtwork != null ? currentArtwork : fallbackArtwork;
-
-        nb.setContentTitle(currentTitle)
-          .setContentText(currentArtist + "  •  " + formatTime(currentPositionMs) + " / " + formatTime(currentDurationMs))
-          .setSubText(currentAlbum)
-          .setSmallIcon(R.drawable.ic_music_note)
-          .setContentIntent(pOpenApp)
-          .setVisibility(Notification.VISIBILITY_PUBLIC)
-          .setCategory(Notification.CATEGORY_TRANSPORT)
-          .setOngoing(isPlaying)
-          .setShowWhen(false)
-          .addAction(R.drawable.ic_prev, "Previous", pPrev)
-          .addAction(isPlaying ? R.drawable.ic_pause : R.drawable.ic_play, isPlaying ? "Pause" : "Play", pPlayPause)
-          .addAction(R.drawable.ic_next, "Next", pNext);
-
-        if (art != null) {
-            nb.setLargeIcon(art);
-        }
-
-        Notification.MediaStyle style = new Notification.MediaStyle();
-        if (mediaSession != null) {
-            style.setMediaSession(mediaSession.getSessionToken());
-        }
-        style.setShowActionsInCompactView(0, 1, 2);
-        nb.setStyle(style);
-
-        return nb.build();
-    }
-
-    private String formatTime(long millis) {
-        long totalSeconds = Math.max(0L, millis) / 1000L;
-        long minutes = totalSeconds / 60L;
-        long seconds = totalSeconds % 60L;
-        return String.format(java.util.Locale.ROOT, "%02d:%02d", minutes, seconds);
-    }
-
-    private void updateNotification() {
-        isMusicCurrentlyPlaying = isPlaying;
-        Notification notification = buildNotification();
-        startForegroundCompat(notification);
-    }
-
-    private void startForegroundCompat(Notification notification) {
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
-            } else {
-                startForeground(NOTIFICATION_ID, notification);
-            }
-        } catch (Exception e) {
-            try {
-                startForeground(NOTIFICATION_ID, notification);
-            } catch (Exception ignored) {}
-        }
-    }
-
     @Override
     public void onDestroy() {
         if (mediaSession != null) {
-            mediaSession.setActive(false);
             mediaSession.release();
+            mediaSession = null;
         }
-        artworkCache.evictAll();
+        if (customPlayer != null) {
+            customPlayer.release();
+            customPlayer = null;
+        }
+        artworkDataCache.evictAll();
         isMusicCurrentlyPlaying = false;
         super.onDestroy();
-    }
-
-    @Override
-    public IBinder onBind(Intent intent) {
-        return null;
     }
 }

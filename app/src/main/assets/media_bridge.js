@@ -600,19 +600,27 @@
 
   function bridge() { return window.MediaBridge || null; }
 
-  function reportMeta(title, artist, album, art, playing, identity, force) {
+  var lastUpcomingTitle = '', lastUpcomingArtist = '';
+  function reportMeta(title, artist, album, art, playing, identity, force, upcomingTitle, upcomingArtist) {
     var b = bridge();
-    if (!b || !b.updateMetadata) return;
+    if (!b) return;
     var t = (title || '').trim();
     var ar = (artist || '').trim();
     var al = (album || '').trim() || 'INSTA MUSIC';
     var image = (art || '').trim();
+    var ut = (upcomingTitle || '').trim();
+    var uar = (upcomingArtist || '').trim();
     var id = identity || '';
-    var changed = t !== lastTitle || ar !== lastArtist || al !== lastAlbum || image !== lastArt || id !== lastIdentity;
+    var changed = t !== lastTitle || ar !== lastArtist || al !== lastAlbum || image !== lastArt || id !== lastIdentity || ut !== lastUpcomingTitle || uar !== lastUpcomingArtist;
     if (!changed && !force) return;
     lastTitle = t; lastArtist = ar; lastAlbum = al; lastArt = image; lastIdentity = id;
+    lastUpcomingTitle = ut; lastUpcomingArtist = uar;
     try {
-      b.updateMetadata(t || 'INSTA MUSIC', ar || 'Streaming', al, image, !!playing);
+      if (typeof b.updateMetadataWithUpcoming === 'function') {
+        b.updateMetadataWithUpcoming(t || 'INSTA MUSIC', ar || 'Streaming', al, image, !!playing, ut, uar);
+      } else if (typeof b.updateMetadata === 'function') {
+        b.updateMetadata(t || 'INSTA MUSIC', ar || 'Streaming', al, image, !!playing);
+      }
     } catch(e) {}
   }
 
@@ -722,6 +730,22 @@
     } catch(e) {}
   };
 
+  window.__triggerMediaSeek = function(seconds) {
+    if (!Number.isFinite(seconds) || seconds < 0) return;
+    hookMediaSession();
+    var seekFn = actions['seekto'];
+    if (typeof seekFn === 'function') {
+      try { seekFn({ action: 'seekto', seekTime: seconds }); } catch(e) {}
+    }
+    var audios = Array.from(audioElements).filter(function(a) { return a && !a.ended; });
+    var target = audios.find(function(a) { return !a.paused; }) || audios[0] || document.querySelector('audio');
+    if (target) {
+      try {
+        target.currentTime = seconds;
+      } catch(e) {}
+    }
+  };
+
   function findPlayingAudio() {
     for (var a of audioElements) {
       if (a && !a.paused && !a.ended) return a;
@@ -764,17 +788,44 @@
           var activeId = data.activeId || data.currentSongId || (data.queue && data.queue[data.queueIndex]);
           var songs = data.songs || data.tracks || [];
           if (activeId && Array.isArray(songs)) {
-            var found = songs.find(function(s) { return s.id === activeId; });
-            if (found) {
+            var foundIdx = songs.findIndex(function(s) { return s.id === activeId; });
+            if (foundIdx !== -1) {
+              var found = songs[foundIdx];
+              var upcoming = null;
+              if (Array.isArray(data.queue) && data.queue.length > 0) {
+                var qIdx = typeof data.queueIndex === 'number' ? data.queueIndex : data.queue.indexOf(activeId);
+                if (qIdx >= 0 && qIdx + 1 < data.queue.length) {
+                  var nextId = data.queue[qIdx + 1];
+                  var nextS = songs.find(function(s) { return s.id === nextId; });
+                  if (nextS) upcoming = { title: nextS.title || nextS.name || '', artist: nextS.artist || nextS.creator || '' };
+                }
+              }
+              if (!upcoming && foundIdx + 1 < songs.length) {
+                var seqNext = songs[foundIdx + 1];
+                upcoming = { title: seqNext.title || seqNext.name || '', artist: seqNext.artist || seqNext.creator || '' };
+              }
               return {
                 title: found.title || found.name || '',
                 artist: found.artist || found.creator || '',
                 album: found.album || 'INSTA MUSIC',
-                artwork: found.artwork || found.cover || found.image || ''
+                artwork: found.artwork || found.cover || found.image || '',
+                upcoming: upcoming
               };
             }
           }
         }
+      }
+    } catch(e) {}
+    return null;
+  }
+
+  function getUpcomingTrackFromDom() {
+    try {
+      var nextEl = document.querySelector('[data-upcoming-song], [data-next-track], .queue-item-next, [class*="up-next"], [class*="next-song"]');
+      if (nextEl) {
+        var t = (nextEl.querySelector('h1, h2, h3, h4, [class*="title"], [class*="song"]') || nextEl).textContent || '';
+        var ar = (nextEl.querySelector('p, span, [class*="artist"], [class*="creator"]') || {}).textContent || '';
+        if (t.trim()) return { title: t.trim(), artist: ar.trim() };
       }
     } catch(e) {}
     return null;
@@ -797,20 +848,26 @@
       return;
     }
 
+    var domUpcoming = getUpcomingTrackFromDom();
+
     var fromDom = getActiveTrackFromDom();
     if (fromDom && fromDom.title) {
-      reportMeta(fromDom.title, fromDom.artist, fromDom.album, fromDom.artwork, isPlaying, 'dom:' + fromDom.title);
+      var uTitle = domUpcoming ? domUpcoming.title : '';
+      var uArtist = domUpcoming ? domUpcoming.artist : '';
+      reportMeta(fromDom.title, fromDom.artist, fromDom.album, fromDom.artwork, isPlaying, 'dom:' + fromDom.title, false, uTitle, uArtist);
       return;
     }
 
     var fromStore = getActiveTrackFromStore();
     if (fromStore && fromStore.title) {
-      reportMeta(fromStore.title, fromStore.artist, fromStore.album, fromStore.artwork, isPlaying, 'store:' + fromStore.title);
+      var uTitle2 = (fromStore.upcoming && fromStore.upcoming.title) || (domUpcoming ? domUpcoming.title : '');
+      var uArtist2 = (fromStore.upcoming && fromStore.upcoming.artist) || (domUpcoming ? domUpcoming.artist : '');
+      reportMeta(fromStore.title, fromStore.artist, fromStore.album, fromStore.artwork, isPlaying, 'store:' + fromStore.title, false, uTitle2, uArtist2);
       return;
     }
 
     if (isPlaying) {
-      reportMeta('INSTA MUSIC', 'Streaming', 'INSTA MUSIC', '', true, 'fallback', false);
+      reportMeta('INSTA MUSIC', 'Streaming', 'INSTA MUSIC', '', true, 'fallback', false, '', '');
     }
   }
 
