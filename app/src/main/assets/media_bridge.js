@@ -15,13 +15,26 @@
   }
   if (navigator.mediaSession) {
     try {
-      var _meta = navigator.mediaSession.metadata || null;
+      var proto = Object.getPrototypeOf(navigator.mediaSession) || navigator.mediaSession;
+      var desc = Object.getOwnPropertyDescriptor(proto, 'metadata') || Object.getOwnPropertyDescriptor(navigator.mediaSession, 'metadata');
+      var nativeSet = desc && desc.set;
+      var nativeGet = desc && desc.get;
+      var _meta = null;
+
       Object.defineProperty(navigator.mediaSession, 'metadata', {
         configurable: true,
         enumerable: true,
-        get: function() { return _meta; },
+        get: function() {
+          if (nativeGet) {
+            try { return nativeGet.call(navigator.mediaSession); } catch(e) {}
+          }
+          return _meta;
+        },
         set: function(val) {
           _meta = val;
+          if (nativeSet) {
+            try { nativeSet.call(navigator.mediaSession, val); } catch(e) {}
+          }
           if (val) {
             var t = (val.title || '').trim();
             var ar = (val.artist || '').trim();
@@ -651,7 +664,9 @@
     ['play','playing','pause','ended','timeupdate','durationchange','loadedmetadata'].forEach(function(ev) {
       a.addEventListener(ev, function() {
         reportInfo(a, ev === 'play' || ev === 'playing' || ev === 'pause' || ev === 'ended' || ev === 'durationchange');
-        sync();
+        if (ev !== 'timeupdate') {
+          scheduleSync();
+        }
       });
     });
 
@@ -669,12 +684,35 @@
 
   var OrigAudio = window.Audio;
   if (OrigAudio) {
-    window.Audio = function(src) {
-      var a = new OrigAudio(src);
-      addAudio(a);
-      return a;
-    };
-    window.Audio.prototype = OrigAudio.prototype;
+    try {
+      if (typeof Proxy !== 'undefined' && typeof Reflect !== 'undefined') {
+        window.Audio = new Proxy(OrigAudio, {
+          construct: function(target, args) {
+            var a = Reflect.construct(target, args);
+            addAudio(a);
+            return a;
+          }
+        });
+      } else {
+        window.Audio = function() {
+          var a = (arguments.length > 0 && typeof arguments[0] !== 'undefined')
+            ? new OrigAudio(arguments[0])
+            : new OrigAudio();
+          addAudio(a);
+          return a;
+        };
+        window.Audio.prototype = OrigAudio.prototype;
+      }
+    } catch(e) {
+      window.Audio = function() {
+        var a = (arguments.length > 0 && typeof arguments[0] !== 'undefined')
+          ? new OrigAudio(arguments[0])
+          : new OrigAudio();
+        addAudio(a);
+        return a;
+      };
+      window.Audio.prototype = OrigAudio.prototype;
+    }
   }
   if (window.HTMLAudioElement && window.HTMLAudioElement.prototype) {
     var proto = window.HTMLAudioElement.prototype, origPlay = proto.play, origPause = proto.pause;
@@ -682,14 +720,14 @@
       addAudio(this);
       var r = origPlay.apply(this, arguments);
       reportInfo(this, true);
-      sync();
+      scheduleSync();
       return r;
     };
     proto.pause = function() {
       addAudio(this);
       var r = origPause.apply(this, arguments);
       reportInfo(this, true);
-      sync();
+      scheduleSync();
       return r;
     };
   }

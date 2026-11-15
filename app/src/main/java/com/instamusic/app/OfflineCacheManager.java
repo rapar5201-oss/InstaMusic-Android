@@ -227,7 +227,17 @@ public class OfflineCacheManager {
         Map<String, String> headers = new HashMap<>();
         headers.put("Access-Control-Allow-Origin", "*");
         headers.put("Cache-Control", "public, max-age=86400");
-        return new WebResourceResponse(mimeType, "UTF-8", 200, "OK", headers, is);
+        String encoding = isTextMime(mimeType) ? "UTF-8" : null;
+        return new WebResourceResponse(mimeType, encoding, 200, "OK", headers, is);
+    }
+
+    private static boolean isTextMime(String mimeType) {
+        if (mimeType == null) return false;
+        String lower = mimeType.toLowerCase();
+        return lower.startsWith("text/") ||
+               lower.contains("javascript") ||
+               lower.contains("json") ||
+               lower.contains("xml");
     }
 
     private static String guessMimeType(String path) {
@@ -238,6 +248,10 @@ public class OfflineCacheManager {
         if (lower.endsWith(".css")) return "text/css";
         if (lower.endsWith(".png")) return "image/png";
         if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
+        if (lower.endsWith(".mp3")) return "audio/mpeg";
+        if (lower.endsWith(".m4a") || lower.endsWith(".mp4")) return "audio/mp4";
+        if (lower.endsWith(".ogg") || lower.endsWith(".opus")) return "audio/ogg";
+        if (lower.endsWith(".wav")) return "audio/wav";
         if (lower.endsWith(".svg")) return "image/svg+xml";
         if (lower.endsWith(".ico")) return "image/x-icon";
         if (lower.endsWith(".woff2")) return "font/woff2";

@@ -11,8 +11,6 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Paint;
-import android.media.AudioAttributes;
-import android.media.AudioFocusRequest;
 import android.media.AudioManager;
 import android.os.Build;
 import android.os.Handler;
@@ -101,30 +99,8 @@ public class MusicPlaybackService extends MediaSessionService {
 
     private PowerManager.WakeLock wakeLock;
     private AudioManager audioManager;
-    private AudioFocusRequest audioFocusRequest;
-    private boolean hasAudioFocus = false;
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
-
-    private final AudioManager.OnAudioFocusChangeListener audioFocusChangeListener = focusChange -> {
-        switch (focusChange) {
-            case AudioManager.AUDIOFOCUS_LOSS:
-            case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT:
-                if (isPlaying) {
-                    sendActionToApp(ACTION_PAUSE);
-                    isPlaying = false;
-                    isMusicCurrentlyPlaying = false;
-                    releaseWakeLock();
-                    unregisterNoisyReceiver();
-                    requestPlayerStateUpdate();
-                }
-                break;
-            case AudioManager.AUDIOFOCUS_GAIN:
-                break;
-            default:
-                break;
-        }
-    };
 
     private final BroadcastReceiver noisyAudioReceiver = new BroadcastReceiver() {
         @Override
@@ -135,7 +111,6 @@ public class MusicPlaybackService extends MediaSessionService {
                     isPlaying = false;
                     isMusicCurrentlyPlaying = false;
                     releaseWakeLock();
-                    abandonAudioFocus();
                     requestPlayerStateUpdate();
                 }
             }
@@ -247,11 +222,9 @@ public class MusicPlaybackService extends MediaSessionService {
             isMusicCurrentlyPlaying = isPlaying;
             if (isPlaying) {
                 acquireWakeLock();
-                requestAudioFocus();
                 registerNoisyReceiver();
             } else {
                 releaseWakeLock();
-                abandonAudioFocus();
                 unregisterNoisyReceiver();
             }
             sendActionToApp(playWhenReady ? ACTION_PLAY : ACTION_PAUSE);
@@ -295,7 +268,6 @@ public class MusicPlaybackService extends MediaSessionService {
             isPlaying = false;
             isMusicCurrentlyPlaying = false;
             releaseWakeLock();
-            abandonAudioFocus();
             unregisterNoisyReceiver();
             sendActionToApp(ACTION_PAUSE);
             invalidateState();
@@ -390,45 +362,7 @@ public class MusicPlaybackService extends MediaSessionService {
         } catch (Exception ignored) {}
     }
 
-    private void requestAudioFocus() {
-        if (hasAudioFocus || audioManager == null) return;
-        try {
-            int result;
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                if (audioFocusRequest == null) {
-                    AudioAttributes playbackAttributes = new AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_MEDIA)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                        .build();
-                    audioFocusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
-                        .setAudioAttributes(playbackAttributes)
-                        .setAcceptsDelayedFocusGain(false)
-                        .setOnAudioFocusChangeListener(audioFocusChangeListener, mainHandler)
-                        .build();
-                }
-                result = audioManager.requestAudioFocus(audioFocusRequest);
-            } else {
-                result = audioManager.requestAudioFocus(
-                    audioFocusChangeListener,
-                    AudioManager.STREAM_MUSIC,
-                    AudioManager.AUDIOFOCUS_GAIN
-                );
-            }
-            hasAudioFocus = (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED);
-        } catch (Exception ignored) {}
-    }
 
-    private void abandonAudioFocus() {
-        if (!hasAudioFocus || audioManager == null) return;
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && audioFocusRequest != null) {
-                audioManager.abandonAudioFocusRequest(audioFocusRequest);
-            } else {
-                audioManager.abandonAudioFocus(audioFocusChangeListener);
-            }
-        } catch (Exception ignored) {}
-        hasAudioFocus = false;
-    }
 
     private void registerNoisyReceiver() {
         if (!isNoisyReceiverRegistered) {
@@ -554,12 +488,10 @@ public class MusicPlaybackService extends MediaSessionService {
                 isMusicCurrentlyPlaying = isPlaying;
                 if (isPlaying) {
                     acquireWakeLock();
-                    requestAudioFocus();
-                    registerNoisyReceiver();
+                        registerNoisyReceiver();
                 } else {
                     releaseWakeLock();
-                    abandonAudioFocus();
-                    unregisterNoisyReceiver();
+                        unregisterNoisyReceiver();
                 }
             }
 
@@ -581,11 +513,9 @@ public class MusicPlaybackService extends MediaSessionService {
             isMusicCurrentlyPlaying = isPlaying;
             if (isPlaying) {
                 acquireWakeLock();
-                requestAudioFocus();
                 registerNoisyReceiver();
             } else {
                 releaseWakeLock();
-                abandonAudioFocus();
                 unregisterNoisyReceiver();
             }
             lastPositionUpdateMs = SystemClock.elapsedRealtime();
@@ -598,12 +528,10 @@ public class MusicPlaybackService extends MediaSessionService {
                 isMusicCurrentlyPlaying = isPlaying;
                 if (isPlaying) {
                     acquireWakeLock();
-                    requestAudioFocus();
-                    registerNoisyReceiver();
+                        registerNoisyReceiver();
                 } else {
                     releaseWakeLock();
-                    abandonAudioFocus();
-                    unregisterNoisyReceiver();
+                        unregisterNoisyReceiver();
                 }
             }
             lastPositionUpdateMs = SystemClock.elapsedRealtime();
@@ -612,7 +540,6 @@ public class MusicPlaybackService extends MediaSessionService {
             isPlaying = false;
             isMusicCurrentlyPlaying = false;
             releaseWakeLock();
-            abandonAudioFocus();
             unregisterNoisyReceiver();
             stopSelf();
             return START_NOT_STICKY;
@@ -621,7 +548,6 @@ public class MusicPlaybackService extends MediaSessionService {
             isPlaying = true;
             isMusicCurrentlyPlaying = true;
             acquireWakeLock();
-            requestAudioFocus();
             registerNoisyReceiver();
             requestPlayerStateUpdate();
         } else if (ACTION_PAUSE.equals(action)) {
@@ -629,7 +555,6 @@ public class MusicPlaybackService extends MediaSessionService {
             isPlaying = false;
             isMusicCurrentlyPlaying = false;
             releaseWakeLock();
-            abandonAudioFocus();
             unregisterNoisyReceiver();
             requestPlayerStateUpdate();
         } else if (ACTION_PREV.equals(action)) {
@@ -717,7 +642,6 @@ public class MusicPlaybackService extends MediaSessionService {
     @Override
     public void onDestroy() {
         releaseWakeLock();
-        abandonAudioFocus();
         unregisterNoisyReceiver();
         if (mediaSession != null) {
             mediaSession.release();
