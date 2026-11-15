@@ -3,15 +3,21 @@ package com.instamusic.app;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Paint;
+import android.media.AudioAttributes;
+import android.media.AudioFocusRequest;
+import android.media.AudioManager;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.PowerManager;
 import android.os.SystemClock;
 import android.util.LruCache;
 
@@ -28,6 +34,7 @@ import androidx.media3.common.util.UnstableApi;
 import androidx.media3.session.DefaultMediaNotificationProvider;
 import androidx.media3.session.MediaSession;
 import androidx.media3.session.MediaSessionService;
+import androidx.media3.session.SessionCommands;
 
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
@@ -92,7 +99,49 @@ public class MusicPlaybackService extends MediaSessionService {
     private long currentDurationMs = 0L;
     private long lastPositionUpdateMs = 0L;
 
+    private PowerManager.WakeLock wakeLock;
+    private AudioManager audioManager;
+    private AudioFocusRequest audioFocusRequest;
+    private boolean hasAudioFocus = false;
+
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
+
+    private final AudioManager.OnAudioFocusChangeListener audioFocusChangeListener = focusChange -> {
+        switch (focusChange) {
+            case AudioManager.AUDIOFOCUS_LOSS:
+            case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT:
+                if (isPlaying) {
+                    sendActionToApp(ACTION_PAUSE);
+                    isPlaying = false;
+                    isMusicCurrentlyPlaying = false;
+                    releaseWakeLock();
+                    unregisterNoisyReceiver();
+                    requestPlayerStateUpdate();
+                }
+                break;
+            case AudioManager.AUDIOFOCUS_GAIN:
+                break;
+            default:
+                break;
+        }
+    };
+
+    private final BroadcastReceiver noisyAudioReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (AudioManager.ACTION_AUDIO_BECOMING_NOISY.equals(intent.getAction())) {
+                if (isPlaying) {
+                    sendActionToApp(ACTION_PAUSE);
+                    isPlaying = false;
+                    isMusicCurrentlyPlaying = false;
+                    releaseWakeLock();
+                    abandonAudioFocus();
+                    requestPlayerStateUpdate();
+                }
+            }
+        }
+    };
+    private boolean isNoisyReceiverRegistered = false;
 
     private final class InstaMusicPlayer extends SimpleBasePlayer {
         public InstaMusicPlayer(Looper looper) {
@@ -113,6 +162,8 @@ public class MusicPlaybackService extends MediaSessionService {
                 .add(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
                 .add(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM)
                 .add(Player.COMMAND_SEEK_TO_MEDIA_ITEM)
+                .add(Player.COMMAND_SEEK_BACK)
+                .add(Player.COMMAND_SEEK_FORWARD)
                 .add(Player.COMMAND_STOP)
                 .add(Player.COMMAND_GET_CURRENT_MEDIA_ITEM)
                 .add(Player.COMMAND_GET_TIMELINE)
@@ -168,10 +219,15 @@ public class MusicPlaybackService extends MediaSessionService {
                 playlist.add(nextData);
             }
 
+            // In Media3, when a song is loaded, playbackState must remain STATE_READY even when paused.
+            // Setting STATE_IDLE on pause would mislead lock screen, Bluetooth AVRCP, and Android Auto into thinking no track is ready.
+            boolean hasTrackLoaded = (currentTitle != null && !currentTitle.trim().isEmpty() && !currentTitle.equalsIgnoreCase("INSTA MUSIC"));
+            int playbackState = (hasTrackLoaded || isPlaying) ? Player.STATE_READY : Player.STATE_IDLE;
+
             return new State.Builder()
                 .setAvailableCommands(commands)
                 .setPlayWhenReady(isPlaying, Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST)
-                .setPlaybackState(isPlaying ? Player.STATE_READY : Player.STATE_IDLE)
+                .setPlaybackState(playbackState)
                 .setPlaylist(playlist)
                 .setCurrentMediaItemIndex(0)
                 .setContentPositionMs(() -> {
@@ -189,20 +245,47 @@ public class MusicPlaybackService extends MediaSessionService {
         protected ListenableFuture<?> handleSetPlayWhenReady(boolean playWhenReady) {
             isPlaying = playWhenReady;
             isMusicCurrentlyPlaying = isPlaying;
+            if (isPlaying) {
+                acquireWakeLock();
+                requestAudioFocus();
+                registerNoisyReceiver();
+            } else {
+                releaseWakeLock();
+                abandonAudioFocus();
+                unregisterNoisyReceiver();
+            }
             sendActionToApp(playWhenReady ? ACTION_PLAY : ACTION_PAUSE);
+            invalidateState();
             return Futures.immediateVoidFuture();
         }
 
         @Override
         protected ListenableFuture<?> handleSeek(int mediaItemIndex, long positionMs, int seekCommand) {
-            if (seekCommand == Player.COMMAND_SEEK_TO_NEXT || seekCommand == Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM) {
+            if (seekCommand == Player.COMMAND_SEEK_TO_NEXT
+                || seekCommand == Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM
+                || (mediaItemIndex > 0 && seekCommand == Player.COMMAND_SEEK_TO_MEDIA_ITEM)) {
                 sendActionToApp(ACTION_NEXT);
-            } else if (seekCommand == Player.COMMAND_SEEK_TO_PREVIOUS || seekCommand == Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM) {
+            } else if (seekCommand == Player.COMMAND_SEEK_TO_PREVIOUS
+                       || seekCommand == Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM) {
                 sendActionToApp(ACTION_PREV);
-            } else if (seekCommand == Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM || seekCommand == Player.COMMAND_SEEK_TO_MEDIA_ITEM) {
+            } else if (seekCommand == Player.COMMAND_SEEK_FORWARD) {
+                long targetPos = currentDurationMs > 0 ? Math.min(currentPositionMs + 10000L, currentDurationMs) : currentPositionMs + 10000L;
+                sendSeekToApp(targetPos);
+                currentPositionMs = targetPos;
+                lastPositionUpdateMs = SystemClock.elapsedRealtime();
+                invalidateState();
+            } else if (seekCommand == Player.COMMAND_SEEK_BACK) {
+                long targetPos = Math.max(0L, currentPositionMs - 10000L);
+                sendSeekToApp(targetPos);
+                currentPositionMs = targetPos;
+                lastPositionUpdateMs = SystemClock.elapsedRealtime();
+                invalidateState();
+            } else if (seekCommand == Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM
+                       || seekCommand == Player.COMMAND_SEEK_TO_MEDIA_ITEM) {
                 sendSeekToApp(positionMs);
                 currentPositionMs = positionMs;
                 lastPositionUpdateMs = SystemClock.elapsedRealtime();
+                invalidateState();
             }
             return Futures.immediateVoidFuture();
         }
@@ -211,7 +294,11 @@ public class MusicPlaybackService extends MediaSessionService {
         protected ListenableFuture<?> handleStop() {
             isPlaying = false;
             isMusicCurrentlyPlaying = false;
+            releaseWakeLock();
+            abandonAudioFocus();
+            unregisterNoisyReceiver();
             sendActionToApp(ACTION_PAUSE);
+            invalidateState();
             return Futures.immediateVoidFuture();
         }
     }
@@ -220,6 +307,7 @@ public class MusicPlaybackService extends MediaSessionService {
     public void onCreate() {
         super.onCreate();
         createNotificationChannel();
+        audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
         fallbackArtworkData = createFallbackArtworkBytes();
         currentArtworkData = fallbackArtworkData;
 
@@ -234,6 +322,25 @@ public class MusicPlaybackService extends MediaSessionService {
 
         mediaSession = new MediaSession.Builder(this, customPlayer)
             .setSessionActivity(pOpenApp)
+            .setCallback(new MediaSession.Callback() {
+                @Override
+                public MediaSession.ConnectionResult onConnect(MediaSession session, MediaSession.ControllerInfo controller) {
+                    MediaSession.ConnectionResult defaultResult = MediaSession.Callback.super.onConnect(session, controller);
+                    SessionCommands.Builder sessionCommands = defaultResult.availableSessionCommands.buildUpon();
+                    Player.Commands.Builder playerCommands = defaultResult.availablePlayerCommands.buildUpon();
+                    playerCommands.add(Player.COMMAND_PLAY_PAUSE);
+                    playerCommands.add(Player.COMMAND_SEEK_TO_NEXT);
+                    playerCommands.add(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM);
+                    playerCommands.add(Player.COMMAND_SEEK_TO_PREVIOUS);
+                    playerCommands.add(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM);
+                    playerCommands.add(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM);
+                    playerCommands.add(Player.COMMAND_SEEK_TO_MEDIA_ITEM);
+                    playerCommands.add(Player.COMMAND_SEEK_BACK);
+                    playerCommands.add(Player.COMMAND_SEEK_FORWARD);
+                    playerCommands.add(Player.COMMAND_STOP);
+                    return MediaSession.ConnectionResult.accept(sessionCommands.build(), playerCommands.build());
+                }
+            })
             .build();
 
         DefaultMediaNotificationProvider notificationProvider = new DefaultMediaNotificationProvider.Builder(this)
@@ -257,6 +364,88 @@ public class MusicPlaybackService extends MediaSessionService {
             mainHandler.post(() -> {
                 if (customPlayer != null) customPlayer.refreshState();
             });
+        }
+    }
+
+    private void acquireWakeLock() {
+        try {
+            if (wakeLock == null) {
+                PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+                if (pm != null) {
+                    wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "InstaMusic:PlaybackWakeLock");
+                    wakeLock.setReferenceCounted(false);
+                }
+            }
+            if (wakeLock != null && !wakeLock.isHeld()) {
+                wakeLock.acquire(180 * 60 * 1000L); // 3 hours max safety duration
+            }
+        } catch (Exception ignored) {}
+    }
+
+    private void releaseWakeLock() {
+        try {
+            if (wakeLock != null && wakeLock.isHeld()) {
+                wakeLock.release();
+            }
+        } catch (Exception ignored) {}
+    }
+
+    private void requestAudioFocus() {
+        if (hasAudioFocus || audioManager == null) return;
+        try {
+            int result;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                if (audioFocusRequest == null) {
+                    AudioAttributes playbackAttributes = new AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .build();
+                    audioFocusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                        .setAudioAttributes(playbackAttributes)
+                        .setAcceptsDelayedFocusGain(false)
+                        .setOnAudioFocusChangeListener(audioFocusChangeListener, mainHandler)
+                        .build();
+                }
+                result = audioManager.requestAudioFocus(audioFocusRequest);
+            } else {
+                result = audioManager.requestAudioFocus(
+                    audioFocusChangeListener,
+                    AudioManager.STREAM_MUSIC,
+                    AudioManager.AUDIOFOCUS_GAIN
+                );
+            }
+            hasAudioFocus = (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED);
+        } catch (Exception ignored) {}
+    }
+
+    private void abandonAudioFocus() {
+        if (!hasAudioFocus || audioManager == null) return;
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && audioFocusRequest != null) {
+                audioManager.abandonAudioFocusRequest(audioFocusRequest);
+            } else {
+                audioManager.abandonAudioFocus(audioFocusChangeListener);
+            }
+        } catch (Exception ignored) {}
+        hasAudioFocus = false;
+    }
+
+    private void registerNoisyReceiver() {
+        if (!isNoisyReceiverRegistered) {
+            try {
+                IntentFilter filter = new IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY);
+                registerReceiver(noisyAudioReceiver, filter);
+                isNoisyReceiverRegistered = true;
+            } catch (Exception ignored) {}
+        }
+    }
+
+    private void unregisterNoisyReceiver() {
+        if (isNoisyReceiverRegistered) {
+            try {
+                unregisterReceiver(noisyAudioReceiver);
+            } catch (Exception ignored) {}
+            isNoisyReceiverRegistered = false;
         }
     }
 
@@ -363,6 +552,15 @@ public class MusicPlaybackService extends MediaSessionService {
             if (intent.hasExtra(EXTRA_IS_PLAYING)) {
                 isPlaying = intent.getBooleanExtra(EXTRA_IS_PLAYING, true);
                 isMusicCurrentlyPlaying = isPlaying;
+                if (isPlaying) {
+                    acquireWakeLock();
+                    requestAudioFocus();
+                    registerNoisyReceiver();
+                } else {
+                    releaseWakeLock();
+                    abandonAudioFocus();
+                    unregisterNoisyReceiver();
+                }
             }
 
             String newArtUrl = intent.getStringExtra(EXTRA_ARTWORK_URL);
@@ -381,29 +579,58 @@ public class MusicPlaybackService extends MediaSessionService {
         } else if (ACTION_UPDATE_STATE.equals(action)) {
             isPlaying = intent.getBooleanExtra(EXTRA_IS_PLAYING, false);
             isMusicCurrentlyPlaying = isPlaying;
+            if (isPlaying) {
+                acquireWakeLock();
+                requestAudioFocus();
+                registerNoisyReceiver();
+            } else {
+                releaseWakeLock();
+                abandonAudioFocus();
+                unregisterNoisyReceiver();
+            }
             lastPositionUpdateMs = SystemClock.elapsedRealtime();
             requestPlayerStateUpdate();
         } else if (ACTION_UPDATE_POSITION.equals(action)) {
             currentPositionMs = Math.max(0L, intent.getLongExtra(EXTRA_POSITION_MS, currentPositionMs));
             currentDurationMs = Math.max(0L, intent.getLongExtra(EXTRA_DURATION_MS, currentDurationMs));
-            isPlaying = intent.getBooleanExtra(EXTRA_IS_PLAYING, isPlaying);
-            isMusicCurrentlyPlaying = isPlaying;
+            if (intent.hasExtra(EXTRA_IS_PLAYING)) {
+                isPlaying = intent.getBooleanExtra(EXTRA_IS_PLAYING, isPlaying);
+                isMusicCurrentlyPlaying = isPlaying;
+                if (isPlaying) {
+                    acquireWakeLock();
+                    requestAudioFocus();
+                    registerNoisyReceiver();
+                } else {
+                    releaseWakeLock();
+                    abandonAudioFocus();
+                    unregisterNoisyReceiver();
+                }
+            }
             lastPositionUpdateMs = SystemClock.elapsedRealtime();
             requestPlayerStateUpdate();
         } else if (ACTION_STOP.equals(action)) {
             isPlaying = false;
             isMusicCurrentlyPlaying = false;
+            releaseWakeLock();
+            abandonAudioFocus();
+            unregisterNoisyReceiver();
             stopSelf();
             return START_NOT_STICKY;
         } else if (ACTION_PLAY.equals(action)) {
             sendActionToApp(ACTION_PLAY);
             isPlaying = true;
             isMusicCurrentlyPlaying = true;
+            acquireWakeLock();
+            requestAudioFocus();
+            registerNoisyReceiver();
             requestPlayerStateUpdate();
         } else if (ACTION_PAUSE.equals(action)) {
             sendActionToApp(ACTION_PAUSE);
             isPlaying = false;
             isMusicCurrentlyPlaying = false;
+            releaseWakeLock();
+            abandonAudioFocus();
+            unregisterNoisyReceiver();
             requestPlayerStateUpdate();
         } else if (ACTION_PREV.equals(action)) {
             sendActionToApp(ACTION_PREV);
@@ -489,6 +716,9 @@ public class MusicPlaybackService extends MediaSessionService {
 
     @Override
     public void onDestroy() {
+        releaseWakeLock();
+        abandonAudioFocus();
+        unregisterNoisyReceiver();
         if (mediaSession != null) {
             mediaSession.release();
             mediaSession = null;

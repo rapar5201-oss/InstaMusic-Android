@@ -716,18 +716,49 @@
   window.__triggerMediaAction = function(action) {
     hookMediaSession();
     var fn = actions[action];
+    var handled = false;
     if (typeof fn === 'function') {
-      try { fn({ action: action }); return; } catch(e) {}
+      try {
+        fn({ action: action });
+        handled = true;
+      } catch(e) {}
     }
+    if (handled) {
+      setTimeout(sync, 120);
+      return;
+    }
+
+    if (action === 'nexttrack') {
+      var nextBtn = document.querySelector('button[aria-label="Next" i], button[title="Next" i], button[aria-label*="next" i]');
+      if (nextBtn) {
+        try { nextBtn.click(); setTimeout(sync, 120); return; } catch(e) {}
+      }
+    } else if (action === 'previoustrack') {
+      var prevBtn = document.querySelector('button[aria-label="Previous" i], button[title="Previous" i], button[aria-label*="prev" i]');
+      if (prevBtn) {
+        try { prevBtn.click(); setTimeout(sync, 120); return; } catch(e) {}
+      }
+    }
+
     var audios = Array.from(audioElements).filter(function(a) { return a && !a.ended; });
     var playing = audios.find(function(a) { return !a.paused; });
     var target = playing || audios[0] || document.querySelector('audio');
     if (!target) return;
     try {
-      if (action === 'play') target.play();
-      else if (action === 'pause') target.pause();
-      else if (action === 'stop') { target.pause(); target.currentTime = 0; }
+      if (action === 'play') {
+        target.play();
+      } else if (action === 'pause') {
+        target.pause();
+      } else if (action === 'stop') {
+        target.pause();
+        target.currentTime = 0;
+      } else if (action === 'seekforward') {
+        target.currentTime = Math.min(target.duration || 0, target.currentTime + 10);
+      } else if (action === 'seekbackward') {
+        target.currentTime = Math.max(0, target.currentTime - 10);
+      }
     } catch(e) {}
+    setTimeout(sync, 120);
   };
 
   window.__triggerMediaSeek = function(seconds) {
@@ -744,6 +775,15 @@
         target.currentTime = seconds;
       } catch(e) {}
     }
+    try {
+      var slider = document.querySelector('input[type="range"][aria-label*="Seek" i]');
+      if (slider) {
+        slider.value = Math.floor(seconds);
+        slider.dispatchEvent(new Event('input', { bubbles: true }));
+        slider.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    } catch(e) {}
+    setTimeout(sync, 120);
   };
 
   function findPlayingAudio() {

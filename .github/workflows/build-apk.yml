@@ -38,7 +38,7 @@ jobs:
             "versionCode": ${{ github.run_number }},
             "versionName": "1.0.${{ github.run_number }}",
             "apkUrl": "https://github.com/rapar5201-oss/InstaMusic-Android/releases/download/latest-apk/app-release.apk",
-            "releaseNotes": "AndroidX Media3 interactive music player notification with complete playback controls (previous, play/pause, next, progress bar seek, lock-screen/Bluetooth/Auto sync), upcoming track support, and 6 smart music notification themes."
+            "releaseNotes": "Enhanced AndroidX Media3 background playback controls (previous, play/pause, next, seeking), lock screen & Bluetooth AVRCP sync, Android Auto integration, Audio Focus, and Android test plan."
           }
           EOF
 
@@ -56,7 +56,7 @@ jobs:
         with:
           tag_name: latest-apk
           name: InstaMusic latest APK (v1.0.${{ github.run_number }})
-          body: "Installable InstaMusic Android app featuring AndroidX Media3 interactive music player notification with complete playback controls (previous, play/pause, next, progress bar seek control, lock-screen/Bluetooth/Auto sync), upcoming track support, and 6 smart music notification themes (followed artist releases, new album/EP, playlist updates, trending playlist songs, taste matches, and genre drops)."
+          body: "Installable InstaMusic Android app featuring AndroidX Media3 interactive music player notification with complete playback controls (previous, play/pause, next, progress bar seek control, lock-screen/Bluetooth/Auto sync), upcoming track support, Partial WakeLock for continuous background playback, Audio Focus & Becoming Noisy handling, and Android test plan (TEST_PLAN.md)."
           files: |
             app/build/outputs/apk/release/app-release.apk
             app/build/outputs/apk/debug/app-debug.apk
