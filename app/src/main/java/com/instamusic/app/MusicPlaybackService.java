@@ -99,6 +99,10 @@ public class MusicPlaybackService extends MediaSessionService {
             super(looper);
         }
 
+        public void refreshState() {
+            invalidateState();
+        }
+
         @Override
         protected State getState() {
             Commands commands = new Commands.Builder()
@@ -248,10 +252,10 @@ public class MusicPlaybackService extends MediaSessionService {
 
     private void requestPlayerStateUpdate() {
         if (Looper.myLooper() == Looper.getMainLooper()) {
-            if (customPlayer != null) customPlayer.invalidateState();
+            if (customPlayer != null) customPlayer.refreshState();
         } else {
             mainHandler.post(() -> {
-                if (customPlayer != null) customPlayer.invalidateState();
+                if (customPlayer != null) customPlayer.refreshState();
             });
         }
     }
