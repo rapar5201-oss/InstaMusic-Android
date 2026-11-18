@@ -394,10 +394,20 @@ public class MainActivity extends Activity {
     public void onBackPressed() {
         if (appView != null && appView.canGoBack()) { appView.goBack(); return; }
         long now = System.currentTimeMillis();
-        if (now - lastBackPressed < BACK_EXIT_MS) super.onBackPressed();
-        else {
+        if (now - lastBackPressed < BACK_EXIT_MS) {
+            if (MusicPlaybackService.isMusicCurrentlyPlaying) {
+                // Keep the WebView alive: its audio engine owns playback. Finishing this
+                // Activity destroys that engine and drops the MediaSession notification.
+                moveTaskToBack(true);
+                Toast.makeText(this, "Music continues in the background", Toast.LENGTH_SHORT).show();
+            } else {
+                super.onBackPressed();
+            }
+        } else {
             lastBackPressed = now;
-            Toast.makeText(this, "Press back again to exit", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, MusicPlaybackService.isMusicCurrentlyPlaying
+                ? "Press back again to keep music playing in the background"
+                : "Press back again to exit", Toast.LENGTH_SHORT).show();
         }
     }
 
