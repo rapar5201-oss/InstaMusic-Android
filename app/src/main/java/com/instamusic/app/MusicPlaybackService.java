@@ -46,7 +46,7 @@ import java.util.List;
 
 @OptIn(markerClass = UnstableApi.class)
 public class MusicPlaybackService extends MediaSessionService {
-    public static final String CHANNEL_ID = "instamusic_playback";
+    public static final String CHANNEL_ID = "instamusic_playback_v2";
     public static final int NOTIFICATION_ID = 101;
 
     public static final String ACTION_UPDATE_METADATA = "com.instamusic.app.UPDATE_METADATA";
@@ -315,6 +315,8 @@ public class MusicPlaybackService extends MediaSessionService {
             })
             .build();
 
+        addSession(mediaSession);
+
         DefaultMediaNotificationProvider notificationProvider = new DefaultMediaNotificationProvider.Builder(this)
             .setChannelId(CHANNEL_ID)
             .setNotificationId(NOTIFICATION_ID)
@@ -332,9 +334,15 @@ public class MusicPlaybackService extends MediaSessionService {
     private void requestPlayerStateUpdate() {
         if (Looper.myLooper() == Looper.getMainLooper()) {
             if (customPlayer != null) customPlayer.refreshState();
+            try {
+                triggerNotificationUpdate();
+            } catch (Exception ignored) {}
         } else {
             mainHandler.post(() -> {
                 if (customPlayer != null) customPlayer.refreshState();
+                try {
+                    triggerNotificationUpdate();
+                } catch (Exception ignored) {}
             });
         }
     }
@@ -388,10 +396,10 @@ public class MusicPlaybackService extends MediaSessionService {
             NotificationChannel channel = new NotificationChannel(
                 CHANNEL_ID,
                 "Music Playback",
-                NotificationManager.IMPORTANCE_LOW
+                NotificationManager.IMPORTANCE_DEFAULT
             );
             channel.setDescription("InstaMusic playback controls and media notification");
-            channel.setShowBadge(false);
+            channel.setShowBadge(true);
             channel.setLockscreenVisibility(android.app.Notification.VISIBILITY_PUBLIC);
             channel.enableVibration(false);
             channel.setSound(null, null);
@@ -644,6 +652,7 @@ public class MusicPlaybackService extends MediaSessionService {
         releaseWakeLock();
         unregisterNoisyReceiver();
         if (mediaSession != null) {
+            removeSession(mediaSession);
             mediaSession.release();
             mediaSession = null;
         }

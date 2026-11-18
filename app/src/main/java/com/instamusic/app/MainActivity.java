@@ -62,6 +62,7 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void updateMetadataWithUpcoming(String title, String artist, String album, String artworkUrl, boolean isPlaying, String upcomingTitle, String upcomingArtist) {
             handler.post(() -> {
+                MusicPlaybackService.isMusicCurrentlyPlaying = isPlaying;
                 checkAndRequestNotificationPermission();
                 Intent intent = new Intent(MainActivity.this, MusicPlaybackService.class);
                 intent.setAction(MusicPlaybackService.ACTION_UPDATE_METADATA);
@@ -91,6 +92,7 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void updatePlaybackInfo(double positionSeconds, double durationSeconds, boolean isPlaying) {
             handler.post(() -> {
+                MusicPlaybackService.isMusicCurrentlyPlaying = isPlaying;
                 checkAndRequestNotificationPermission();
                 Intent intent = new Intent(MainActivity.this, MusicPlaybackService.class);
                 intent.setAction(MusicPlaybackService.ACTION_UPDATE_POSITION);
@@ -160,7 +162,8 @@ public class MainActivity extends Activity {
 
     private void startPlaybackService(Intent intent) {
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            boolean isPlaying = intent.getBooleanExtra(MusicPlaybackService.EXTRA_IS_PLAYING, false);
+            if (isPlaying && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 startForegroundService(intent);
             } else {
                 startService(intent);
@@ -392,22 +395,24 @@ public class MainActivity extends Activity {
 
     @Override
     public void onBackPressed() {
-        if (appView != null && appView.canGoBack()) { appView.goBack(); return; }
+        if (MusicPlaybackService.isMusicCurrentlyPlaying) {
+            // Keep the WebView audio engine alive in background
+            moveTaskToBack(true);
+            Toast.makeText(this, "Music continues in the background", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        if (appView != null && appView.canGoBack()) {
+            appView.goBack();
+            return;
+        }
+
         long now = System.currentTimeMillis();
         if (now - lastBackPressed < BACK_EXIT_MS) {
-            if (MusicPlaybackService.isMusicCurrentlyPlaying) {
-                // Keep the WebView alive: its audio engine owns playback. Finishing this
-                // Activity destroys that engine and drops the MediaSession notification.
-                moveTaskToBack(true);
-                Toast.makeText(this, "Music continues in the background", Toast.LENGTH_SHORT).show();
-            } else {
-                super.onBackPressed();
-            }
+            super.onBackPressed();
         } else {
             lastBackPressed = now;
-            Toast.makeText(this, MusicPlaybackService.isMusicCurrentlyPlaying
-                ? "Press back again to keep music playing in the background"
-                : "Press back again to exit", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "Press back again to exit", Toast.LENGTH_SHORT).show();
         }
     }
 

@@ -54,6 +54,54 @@
           }
         }
       });
+
+      // Hook playbackState on navigator.mediaSession
+      try {
+        var descState = Object.getOwnPropertyDescriptor(proto, 'playbackState') || Object.getOwnPropertyDescriptor(navigator.mediaSession, 'playbackState');
+        var nativeStateSet = descState && descState.set;
+        var nativeStateGet = descState && descState.get;
+        var _state = 'none';
+
+        Object.defineProperty(navigator.mediaSession, 'playbackState', {
+          configurable: true,
+          enumerable: true,
+          get: function() {
+            if (nativeStateGet) {
+              try { return nativeStateGet.call(navigator.mediaSession); } catch(e) {}
+            }
+            return _state;
+          },
+          set: function(val) {
+            _state = val;
+            if (nativeStateSet) {
+              try { nativeStateSet.call(navigator.mediaSession, val); } catch(e) {}
+            }
+            try {
+              if (window.MediaBridge && window.MediaBridge.updatePlaybackState) {
+                window.MediaBridge.updatePlaybackState(val === 'playing');
+              }
+            } catch(e) {}
+          }
+        });
+      } catch(e) {}
+
+      // Hook setPositionState on navigator.mediaSession
+      try {
+        var origSetPos = navigator.mediaSession.setPositionState;
+        navigator.mediaSession.setPositionState = function(state) {
+          if (origSetPos) {
+            try { origSetPos.call(navigator.mediaSession, state); } catch(e) {}
+          }
+          if (state && Number.isFinite(state.duration)) {
+            try {
+              if (window.MediaBridge && window.MediaBridge.updatePlaybackInfo) {
+                var isP = (navigator.mediaSession.playbackState === 'playing') || (_state === 'playing');
+                window.MediaBridge.updatePlaybackInfo(state.position || 0, state.duration, isP);
+              }
+            } catch(e) {}
+          }
+        };
+      } catch(e) {}
     } catch(e) {}
   }
 

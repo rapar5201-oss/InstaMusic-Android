@@ -38,7 +38,7 @@ jobs:
             "versionCode": ${{ github.run_number }},
             "versionName": "1.0.${{ github.run_number }}",
             "apkUrl": "https://github.com/rapar5201-oss/InstaMusic-Android/releases/download/latest-apk/app-release.apk",
-            "releaseNotes": "Background notification fix: pressing Back twice while music is playing now sends InstaMusic to the background instead of destroying its WebView audio engine, keeping the MediaSession notification alive. Playback stops only when paused/stopped or the app is force-stopped."
+            "releaseNotes": "Notification fix: registered MediaSession with addSession so Media3 posts the media notification, upgraded notification channel with default importance for status bar visibility on MIUI/OEM devices, and synchronized real-time playbackState and positionState from the web audio engine."
           }
           EOF
 
@@ -56,7 +56,7 @@ jobs:
         with:
           tag_name: latest-apk
           name: InstaMusic latest APK (v1.0.${{ github.run_number }})
-          body: "Installable InstaMusic Android app with background media notification fix: Back now backgrounds the app during playback instead of finishing the WebView that owns the audio stream."
+          body: "InstaMusic Android release with full MediaSession notification fix: registered session with MediaNotificationManager, upgraded notification channel for status bar visibility on MIUI/Android 13+, and real-time playback synchronization."
           files: |
             app/build/outputs/apk/release/app-release.apk
             app/build/outputs/apk/debug/app-debug.apk
