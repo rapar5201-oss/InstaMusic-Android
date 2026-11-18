@@ -334,15 +334,9 @@ public class MusicPlaybackService extends MediaSessionService {
     private void requestPlayerStateUpdate() {
         if (Looper.myLooper() == Looper.getMainLooper()) {
             if (customPlayer != null) customPlayer.refreshState();
-            try {
-                triggerNotificationUpdate();
-            } catch (Exception ignored) {}
         } else {
             mainHandler.post(() -> {
                 if (customPlayer != null) customPlayer.refreshState();
-                try {
-                    triggerNotificationUpdate();
-                } catch (Exception ignored) {}
             });
         }
     }
