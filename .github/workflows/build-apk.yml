@@ -38,7 +38,7 @@ jobs:
             "versionCode": ${{ github.run_number }},
             "versionName": "1.0.${{ github.run_number }}",
             "apkUrl": "https://github.com/rapar5201-oss/InstaMusic-Android/releases/download/latest-apk/app-release.apk",
-            "releaseNotes": "Full app bundle & playback engine upgrade: bundled all design components, pages, styles and routes inside the APK for instant offline-first launch; fixed music search and playback with operational high-bitrate JioSaavn API (saavnx.vercel.app); added transparent API proxying; permanently removed watermark badge; and ensured 100% offline library playback."
+            "releaseNotes": "Skeleton shimmer loading effects: added smooth animated skeleton placeholders matching real card and row layouts across Home, Search, Genre, Mix, and Discover; upgraded dark/light theme gradient animations; bundled offline frontend assets; and restored high-quality music streaming with failover proxy."
           }
           EOF
 
@@ -56,7 +56,7 @@ jobs:
         with:
           tag_name: latest-apk
           name: InstaMusic latest APK (v1.0.${{ github.run_number }})
-          body: "InstaMusic Android release with full app bundle and working music engine: all components, pages, routes, fonts and styles packaged directly in the APK; music streaming and search restored with high-quality JioSaavn API; transparent API failover proxying; permanently hidden watermark badge; and persistent lockscreen/notification controls."
+          body: "InstaMusic Android release with skeleton shimmer loading animations: smooth animated card and row loading skeletons across Home, Search, Genre, Mix, and Discover routes; fully offline-bundled web shell and assets; restored high-quality music streaming with saavnx API; and persistent lockscreen/notification controls."
           files: |
             app/build/outputs/apk/release/app-release.apk
             app/build/outputs/apk/debug/app-debug.apk
