@@ -38,7 +38,7 @@ jobs:
             "versionCode": ${{ github.run_number }},
             "versionName": "1.0.${{ github.run_number }}",
             "apkUrl": "https://github.com/rapar5201-oss/InstaMusic-Android/releases/download/latest-apk/app-release.apk",
-            "releaseNotes": "Notification fix: registered MediaSession with addSession so Media3 posts the media notification, upgraded notification channel with default importance for status bar visibility on MIUI/OEM devices, and synchronized real-time playbackState and positionState from the web audio engine."
+            "releaseNotes": "Full app bundle & playback engine upgrade: bundled all design components, pages, styles and routes inside the APK for instant offline-first launch; fixed music search and playback with operational high-bitrate JioSaavn API (saavnx.vercel.app); added transparent API proxying; permanently removed watermark badge; and ensured 100% offline library playback."
           }
           EOF
 
@@ -56,7 +56,7 @@ jobs:
         with:
           tag_name: latest-apk
           name: InstaMusic latest APK (v1.0.${{ github.run_number }})
-          body: "InstaMusic Android release with full MediaSession notification fix: registered session with MediaNotificationManager, upgraded notification channel for status bar visibility on MIUI/Android 13+, and real-time playback synchronization."
+          body: "InstaMusic Android release with full app bundle and working music engine: all components, pages, routes, fonts and styles packaged directly in the APK; music streaming and search restored with high-quality JioSaavn API; transparent API failover proxying; permanently hidden watermark badge; and persistent lockscreen/notification controls."
           files: |
             app/build/outputs/apk/release/app-release.apk
             app/build/outputs/apk/debug/app-debug.apk

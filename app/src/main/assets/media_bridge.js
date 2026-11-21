@@ -1,4 +1,23 @@
 (function() {
+  // Automatic proxy rewriter for broken JioSaavn endpoints
+  try {
+    var _origFetch = window.fetch;
+    if (_origFetch) {
+      window.fetch = function(url, options) {
+        if (typeof url === 'string') {
+          if (url.indexOf('jiosavan-api2.vercel.app/api') !== -1 || url.indexOf('saavn.sumit.co/api') !== -1) {
+            url = url.replace(/https:\/\/(jiosavan-api2\.vercel\.app|saavn\.sumit\.co)\/api/g, 'https://saavnx.vercel.app/api');
+          }
+        } else if (url && url.url) {
+          if (url.url.indexOf('jiosavan-api2.vercel.app/api') !== -1 || url.url.indexOf('saavn.sumit.co/api') !== -1) {
+            var patched = url.url.replace(/https:\/\/(jiosavan-api2\.vercel\.app|saavn\.sumit\.co)\/api/g, 'https://saavnx.vercel.app/api');
+            try { url = new Request(patched, url); } catch(e) {}
+          }
+        }
+        return _origFetch.call(this, url, options);
+      };
+    }
+  } catch(e) {}
   // Safe MediaMetadata mock
   if (typeof window.MediaMetadata === 'undefined') {
     window.MediaMetadata = function(init) {

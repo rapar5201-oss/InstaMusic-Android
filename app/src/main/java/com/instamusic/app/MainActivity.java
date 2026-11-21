@@ -193,6 +193,7 @@ public class MainActivity extends Activity {
     @Override
     public void onCreate(Bundle state) {
         super.onCreate(state);
+        OfflineCacheManager.clearStaleCache(this);
         MusicReminderScheduler.schedulePeriodicReminders(this);
         handleReminderIntent(getIntent());
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);

@@ -123,15 +123,26 @@ public class OfflineCacheManager {
         }
     }
 
+    public static void clearStaleCache(Context context) {
+        if (context == null) return;
+        try {
+            File dir = getCacheDir(context);
+            if (dir != null && dir.exists()) {
+                File html = new File(dir, "index.html");
+                if (html.exists()) html.delete();
+                File js = new File(dir, "assets/music-BLVe8YTA.js");
+                if (js.exists()) js.delete();
+            }
+        } catch (Exception ignored) {}
+    }
+
     public static boolean hasCachedShell(Context context) {
         if (context == null) return false;
-        File diskHtml = new File(getCacheDir(context), "index.html");
-        if (diskHtml.exists() && diskHtml.length() > 0) return true;
         try (InputStream is = context.getAssets().open(ASSET_BASE_PATH + "/index.html")) {
             return is != null;
-        } catch (Exception e) {
-            return false;
-        }
+        } catch (Exception ignored) {}
+        File diskHtml = new File(getCacheDir(context), "index.html");
+        return diskHtml.exists() && diskHtml.length() > 0;
     }
 
     public static WebResourceResponse shouldIntercept(Context context, WebResourceRequest request) {
@@ -142,6 +153,29 @@ public class OfflineCacheManager {
 
         String host = uri.getHost();
         if (host == null) return null;
+
+        // Transparent proxy for legacy/broken JioSaavn endpoints
+        if (host.equalsIgnoreCase("jiosavan-api2.vercel.app") || host.equalsIgnoreCase("saavn.sumit.co")) {
+            String path = uri.getPath();
+            String query = uri.getQuery();
+            String targetUrl = "https://saavnx.vercel.app" + (path != null ? path : "") + (query != null ? "?" + query : "");
+            try {
+                HttpURLConnection conn = (HttpURLConnection) new URL(targetUrl).openConnection();
+                conn.setRequestMethod("GET");
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile)");
+                conn.setConnectTimeout(8000);
+                conn.setReadTimeout(12000);
+                int code = conn.getResponseCode();
+                InputStream is = (code >= 200 && code < 300) ? conn.getInputStream() : conn.getErrorStream();
+                Map<String, String> headers = new HashMap<>();
+                headers.put("Access-Control-Allow-Origin", "*");
+                headers.put("Access-Control-Allow-Methods", "GET, OPTIONS");
+                headers.put("Content-Type", "application/json; charset=utf-8");
+                return new WebResourceResponse("application/json", "UTF-8", code, conn.getResponseMessage(), headers, is);
+            } catch (Exception e) {
+                Log.e(TAG, "Proxy to saavnx failed: " + e.getMessage());
+            }
+        }
 
         boolean isTargetHost = host.equalsIgnoreCase(TARGET_HOST);
 
@@ -170,9 +204,6 @@ public class OfflineCacheManager {
                 // Always serve local index.html immediately for instant startup and offline support
                 InputStream is = openCachedOrAsset(context, "index.html");
                 if (is != null) {
-                    if (isNetworkAvailable(context)) {
-                        refreshHtmlInBackground(context, uri.toString());
-                    }
                     return createResponse("text/html", is);
                 }
             }
@@ -208,16 +239,18 @@ public class OfflineCacheManager {
     }
 
     private static InputStream openCachedOrAsset(Context context, String relativePath) {
+        // Priority 1: bundled APK assets (verified, instant, offline-ready)
+        try {
+            AssetManager am = context.getAssets();
+            return am.open(ASSET_BASE_PATH + "/" + relativePath);
+        } catch (Exception ignored) {}
+
+        // Priority 2: runtime disk cache
         try {
             File diskFile = new File(getCacheDir(context), relativePath);
             if (diskFile.exists() && diskFile.length() > 0) {
                 return new FileInputStream(diskFile);
             }
-        } catch (Exception ignored) {}
-
-        try {
-            AssetManager am = context.getAssets();
-            return am.open(ASSET_BASE_PATH + "/" + relativePath);
         } catch (Exception ignored) {}
 
         return null;
