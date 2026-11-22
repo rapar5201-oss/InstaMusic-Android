@@ -38,7 +38,7 @@ jobs:
             "versionCode": ${{ github.run_number }},
             "versionName": "1.0.${{ github.run_number }}",
             "apkUrl": "https://github.com/rapar5201-oss/InstaMusic-Android/releases/download/latest-apk/app-release.apk",
-            "releaseNotes": "Skeleton shimmer loading effects: added smooth animated skeleton placeholders matching real card and row layouts across Home, Search, Genre, Mix, and Discover; upgraded dark/light theme gradient animations; bundled offline frontend assets; and restored high-quality music streaming with failover proxy."
+            "releaseNotes": "Social & Guest Login (Google, Email+Password, 1-tap Guest with no sign up); stylish Loading Soon modal for Create button; Heart Notification Center in header with unread badge and instant track playback; Smart Shuffle tuned to clicked song artist and vibe; and high-res cover art & polished media notification styling."
           }
           EOF
 
@@ -56,7 +56,7 @@ jobs:
         with:
           tag_name: latest-apk
           name: InstaMusic latest APK (v1.0.${{ github.run_number }})
-          body: "InstaMusic Android release with skeleton shimmer loading animations: smooth animated card and row loading skeletons across Home, Search, Genre, Mix, and Discover routes; fully offline-bundled web shell and assets; restored high-quality music streaming with saavnx API; and persistent lockscreen/notification controls."
+          body: "InstaMusic Android release v1.0.${{ github.run_number }}: Social Login (Google, Email, Guest with no sign-up), Create Button Loading Soon modal, Heart Notification Center in header with unread badge and track playback, Smart Shuffle matching clicked songs, and high-res cover art in media notifications."
           files: |
             app/build/outputs/apk/release/app-release.apk
             app/build/outputs/apk/debug/app-debug.apk

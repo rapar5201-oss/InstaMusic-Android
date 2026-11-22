@@ -65,7 +65,15 @@
             }
             if (t || ar) {
               try {
-                if (window.MediaBridge && window.MediaBridge.updateMetadata) {
+                if (art && art.indexOf('150x150') !== -1) {
+                  art = art.replace(/150x150/g, '500x500');
+                }
+                var domUp = getUpcomingTrackFromDom();
+                var uT = domUp ? domUp.title : '';
+                var uAr = domUp ? domUp.artist : '';
+                if (window.MediaBridge && window.MediaBridge.updateMetadataWithUpcoming) {
+                  window.MediaBridge.updateMetadataWithUpcoming(t || 'INSTA MUSIC', ar || 'Streaming', al, art, true, uT, uAr);
+                } else if (window.MediaBridge && window.MediaBridge.updateMetadata) {
                   window.MediaBridge.updateMetadata(t || 'INSTA MUSIC', ar || 'Streaming', al, art, true);
                 }
               } catch(e) {}
@@ -1006,7 +1014,13 @@
         var last = meta.artwork[meta.artwork.length - 1];
         art = (last && last.src) ? last.src : '';
       }
-      reportMeta(meta.title, meta.artist, meta.album || 'INSTA MUSIC', art, isPlaying, 'ms:' + meta.title + ':' + meta.artist);
+      if (art && art.indexOf('150x150') !== -1) {
+        art = art.replace(/150x150/g, '500x500');
+      }
+      var domUpcoming = getUpcomingTrackFromDom();
+      var uTitle = domUpcoming ? domUpcoming.title : '';
+      var uArtist = domUpcoming ? domUpcoming.artist : '';
+      reportMeta(meta.title, meta.artist, meta.album || 'INSTA MUSIC', art, isPlaying, 'ms:' + meta.title + ':' + meta.artist, false, uTitle, uArtist);
       return;
     }
 
@@ -1040,4 +1054,73 @@
   });
 
   setInterval(sync, 1000);
+
+  // Global stylish Loading Soon modal for Create button
+  window.__im_show_create_loading_soon = function() {
+    var id = "__im_create_loading_soon_modal";
+    var existing = document.getElementById(id);
+    if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+
+    var modal = document.createElement("div");
+    modal.id = id;
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
+    modal.style.cssText = [
+      "position:fixed;inset:0;z-index:999999;",
+      "background:rgba(5,8,13,0.85);backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);",
+      "display:flex;align-items:center;justify-content:center;padding:20px;",
+      "animation:imSmoothSwagEntrance 0.35s cubic-bezier(0.16,1,0.3,1) forwards;"
+    ].join("");
+
+    modal.innerHTML = [
+      "<div style=\"position:relative;width:100%;max-width:380px;background:linear-gradient(145deg, #131722, #0A0D14);border:1px solid rgba(255,255,255,0.18);border-radius:28px;padding:28px 24px;text-align:center;box-shadow:0 24px 60px rgba(0,0,0,0.8),inset 0 1px 0 rgba(255,255,255,0.15);overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;\">",
+      "  <div style=\"position:absolute;top:-40px;left:50%;transform:translateX(-50%);width:180px;height:180px;background:radial-gradient(circle, rgba(255,87,34,0.35) 0%, rgba(225,29,72,0) 70%);filter:blur(30px);pointer-events:none;\"></div>",
+      "  <div style=\"position:relative;display:inline-flex;align-items:center;justify-content:center;width:64px;height:64px;border-radius:20px;background:linear-gradient(135deg, #FF5722, #E11D48);box-shadow:0 8px 24px rgba(255,87,34,0.45);margin-bottom:16px;\">",
+      "    <svg width=\"30\" height=\"30\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#FFFFFF\" stroke-width=\"2.3\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 2v20\"></path><path d=\"M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6\"></path></svg>",
+      "  </div>",
+      "  <div style=\"display:inline-block;padding:4px 12px;border-radius:9999px;background:rgba(255,87,34,0.15);border:1px solid rgba(255,87,34,0.35);color:#FF6B35;font-size:11px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;margin-bottom:12px;\">Creation Studio</div>",
+      "  <h2 style=\"color:#FFFFFF;font-size:24px;font-weight:800;letter-spacing:-0.5px;margin:0 0 10px 0;\">Loading Soon</h2>",
+      "  <p style=\"color:#9CA3AF;font-size:13.5px;line-height:1.55;margin:0 0 24px 0;\">We're crafting the InstaMusic Studio! Soon you will be able to generate AI music moments, remix songs, record original audio, and share custom playlists.</p>",
+      "  <button id=\"__im_btn_close_loading_soon\" style=\"width:100%;height:48px;border-radius:16px;background:linear-gradient(135deg, #FF5722, #E11D48);color:#FFFFFF;border:none;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 8px 24px rgba(255,87,34,0.35);transition:transform 0.15s,opacity 0.15s;outline:none;\">Got it, can't wait!</button>",
+      "</div>"
+    ].join("");
+
+    var closeBtn = modal.querySelector("#__im_btn_close_loading_soon");
+    if (closeBtn) {
+      closeBtn.onclick = function(e) {
+        e.stopPropagation();
+        modal.style.animation = "imSmoothSwagExit 0.25s forwards";
+        setTimeout(function() { if (modal.parentNode) modal.parentNode.removeChild(modal); }, 260);
+      };
+    }
+    modal.onclick = function() {
+      modal.style.animation = "imSmoothSwagExit 0.25s forwards";
+      setTimeout(function() { if (modal.parentNode) modal.parentNode.removeChild(modal); }, 260);
+    };
+
+    (document.body || document.documentElement).appendChild(modal);
+  };
+
+  // Intercept click on any Create navigation or button
+  document.addEventListener("click", function(e) {
+    var target = e.target;
+    while (target && target !== document.body) {
+      if (target.getAttribute && (target.getAttribute("href") === "/create" || target.getAttribute("to") === "/create")) {
+        e.preventDefault();
+        e.stopPropagation();
+        window.__im_show_create_loading_soon();
+        return;
+      }
+      var text = (target.textContent || "").trim().toLowerCase();
+      if ((target.tagName === "BUTTON" || target.tagName === "A") && (text === "create" || text === "create playlist" || text === "create a moment")) {
+        if (target.getAttribute("id") !== "__im_btn_close_loading_soon") {
+          e.preventDefault();
+          e.stopPropagation();
+          window.__im_show_create_loading_soon();
+          return;
+        }
+      }
+      target = target.parentNode;
+    }
+  }, true);
 })();

@@ -155,6 +155,11 @@ public class MusicPlaybackService extends MediaSessionService {
             if (art != null) {
                 metaBuilder.setArtworkData(art, MediaMetadata.PICTURE_TYPE_FRONT_COVER);
             }
+            if (currentArtworkUrl != null && !currentArtworkUrl.trim().isEmpty() && currentArtworkUrl.startsWith("http")) {
+                try {
+                    metaBuilder.setArtworkUri(android.net.Uri.parse(currentArtworkUrl));
+                } catch (Exception ignored) {}
+            }
 
             MediaItem currentItem = new MediaItem.Builder()
                 .setMediaId("instamusic_current_track")
@@ -406,35 +411,65 @@ public class MusicPlaybackService extends MediaSessionService {
 
     private byte[] createFallbackArtworkBytes() {
         try {
-            Bitmap icon = BitmapFactory.decodeResource(getResources(), R.mipmap.ic_launcher);
-            if (icon != null) {
-                return bitmapToByteArray(icon);
-            }
-        } catch (Exception ignored) {}
-
-        try {
-            Bitmap bmp = Bitmap.createBitmap(300, 300, Bitmap.Config.ARGB_8888);
+            int size = 512;
+            Bitmap bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
             Canvas canvas = new Canvas(bmp);
             Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
-            paint.setColor(0xFF14171E);
-            canvas.drawRect(0, 0, 300, 300, paint);
-
-            paint.setStyle(Paint.Style.STROKE);
-            paint.setStrokeWidth(10f);
-            paint.setColor(0x44FF6B35);
-            canvas.drawCircle(150, 150, 110, paint);
-
-            paint.setColor(0x88FF6B35);
-            paint.setStrokeWidth(12f);
-            canvas.drawCircle(150, 150, 75, paint);
-
+            // Deep studio obsidian background
+            android.graphics.LinearGradient bgGrad = new android.graphics.LinearGradient(
+                0f, 0f, (float) size, (float) size,
+                new int[]{0xFF0B0E14, 0xFF121824, 0xFF1C1328},
+                null, android.graphics.Shader.TileMode.CLAMP
+            );
+            paint.setShader(bgGrad);
             paint.setStyle(Paint.Style.FILL);
-            paint.setColor(0xFFFF5722);
-            canvas.drawCircle(150, 150, 32, paint);
+            canvas.drawRect(0, 0, size, size, paint);
+            paint.setShader(null);
 
+            float cx = size / 2f;
+            float cy = size / 2f;
+
+            // Outer vinyl concentric grooves
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setColor(0x20FFFFFF);
+            paint.setStrokeWidth(2f);
+            canvas.drawCircle(cx, cy, 220f, paint);
+            paint.setColor(0x16FFFFFF);
+            canvas.drawCircle(cx, cy, 195f, paint);
+            canvas.drawCircle(cx, cy, 170f, paint);
+            canvas.drawCircle(cx, cy, 145f, paint);
+
+            // Glowing Brand Ring (InstaMusic Orange to Magenta gradient)
+            android.graphics.SweepGradient glowGrad = new android.graphics.SweepGradient(
+                cx, cy,
+                new int[]{0xFFFF5722, 0xFFFF8A00, 0xFFE11D48, 0xFF7C3AED, 0xFFFF5722},
+                null
+            );
+            paint.setShader(glowGrad);
+            paint.setStrokeWidth(22f);
+            canvas.drawCircle(cx, cy, 115f, paint);
+            paint.setShader(null);
+
+            // Inner dark center label
+            paint.setStyle(Paint.Style.FILL);
+            paint.setColor(0xFF0F172A);
+            canvas.drawCircle(cx, cy, 104f, paint);
+
+            // Brand Coral Center Dot
+            paint.setColor(0xFFFF5722);
+            canvas.drawCircle(cx, cy, 36f, paint);
+
+            // Center spindle
             paint.setColor(0xFFFFFFFF);
-            canvas.drawCircle(150, 150, 10, paint);
+            canvas.drawCircle(cx, cy, 12f, paint);
+
+            // Title banner text
+            paint.setColor(0xEEFFFFFF);
+            paint.setTextSize(28f);
+            paint.setTextAlign(Paint.Align.CENTER);
+            paint.setFakeBoldText(true);
+            canvas.drawText("INSTA MUSIC", cx, size - 44f, paint);
 
             return bitmapToByteArray(bmp);
         } catch (Exception e) {
@@ -595,16 +630,41 @@ public class MusicPlaybackService extends MediaSessionService {
                         bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
                     }
                 } else {
-                    URL url = new URL(requestedUrl);
-                    conn = (HttpURLConnection) url.openConnection();
-                    conn.setRequestProperty("User-Agent", "InstaMusic/1.0 (Android)");
-                    conn.setInstanceFollowRedirects(true);
-                    conn.setConnectTimeout(6000);
-                    conn.setReadTimeout(6000);
-                    conn.setDoInput(true);
-                    conn.connect();
-                    is = conn.getInputStream();
-                    bmp = BitmapFactory.decodeStream(is);
+                    String targetUrl = requestedUrl;
+                    if (targetUrl.contains("150x150")) {
+                        targetUrl = targetUrl.replace("150x150", "500x500");
+                    } else if (targetUrl.contains("50x50")) {
+                        targetUrl = targetUrl.replace("50x50", "500x500");
+                    }
+                    for (int redirectCount = 0; redirectCount < 5; redirectCount++) {
+                        URL url = new URL(targetUrl);
+                        conn = (HttpURLConnection) url.openConnection();
+                        conn.setRequestProperty("User-Agent", "InstaMusic/1.0 (Android)");
+                        conn.setInstanceFollowRedirects(true);
+                        conn.setConnectTimeout(8000);
+                        conn.setReadTimeout(8000);
+                        conn.setDoInput(true);
+                        int status = conn.getResponseCode();
+                        if (status == HttpURLConnection.HTTP_MOVED_PERM
+                                || status == HttpURLConnection.HTTP_MOVED_TEMP
+                                || status == HttpURLConnection.HTTP_SEE_OTHER
+                                || status == 307 || status == 308) {
+                            String newLocation = conn.getHeaderField("Location");
+                            if (newLocation != null && !newLocation.trim().isEmpty()) {
+                                if (newLocation.startsWith("/")) {
+                                    newLocation = url.getProtocol() + "://" + url.getHost() + newLocation;
+                                }
+                                targetUrl = newLocation;
+                                conn.disconnect();
+                                continue;
+                            }
+                        }
+                        if (status >= 200 && status < 300) {
+                            is = conn.getInputStream();
+                            bmp = BitmapFactory.decodeStream(is);
+                        }
+                        break;
+                    }
                 }
                 if (bmp != null) {
                     int maxDim = 512;
