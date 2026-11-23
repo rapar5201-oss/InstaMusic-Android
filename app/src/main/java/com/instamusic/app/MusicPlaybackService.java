@@ -386,7 +386,7 @@ public class MusicPlaybackService extends MediaLibraryService {
             }
 
             @Override
-            public ListenableFuture<List<MediaItem>> onSetMediaItems(
+            public ListenableFuture<MediaSession.MediaItemsWithStartPosition> onSetMediaItems(
                     MediaSession mediaSession,
                     MediaSession.ControllerInfo controller,
                     List<MediaItem> mediaItems,
@@ -396,7 +396,7 @@ public class MusicPlaybackService extends MediaLibraryService {
                     int idx = (startIndex >= 0 && startIndex < mediaItems.size()) ? startIndex : 0;
                     handleTrackSelectedFromCar(mediaItems.get(idx));
                 }
-                return Futures.immediateFuture(mediaItems);
+                return MediaLibrarySession.Callback.super.onSetMediaItems(mediaSession, controller, mediaItems, startIndex, startPositionMs);
             }
         };
 
