@@ -400,13 +400,29 @@ public class MusicPlaybackService extends MediaLibraryService {
             }
 
             @Override
-            public ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> onSearch(
+            public ListenableFuture<LibraryResult<Void>> onSearch(
                     MediaLibrarySession session,
                     MediaSession.ControllerInfo browser,
                     String query,
                     @Nullable LibraryParams params) {
-                List<MediaItem> matches = searchTracks(query);
-                return Futures.immediateFuture(LibraryResult.ofItemList(matches, params));
+                int count = searchTracks(query).size();
+                session.notifySearchResultChanged(browser, query, count, params);
+                return Futures.immediateFuture(LibraryResult.ofVoid(params));
+            }
+
+            @Override
+            public ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> onGetSearchResult(
+                    MediaLibrarySession session,
+                    MediaSession.ControllerInfo browser,
+                    String query,
+                    int page,
+                    int pageSize,
+                    @Nullable LibraryParams params) {
+                List<MediaItem> all = searchTracks(query);
+                int fromIndex = Math.max(0, page * pageSize);
+                int toIndex = Math.min(all.size(), fromIndex + pageSize);
+                List<MediaItem> sub = (fromIndex < all.size()) ? all.subList(fromIndex, toIndex) : new ArrayList<>();
+                return Futures.immediateFuture(LibraryResult.ofItemList(sub, params));
             }
 
             @Override
@@ -531,8 +547,6 @@ public class MusicPlaybackService extends MediaLibraryService {
         List<MediaItem> pool = new ArrayList<>();
         pool.addAll(getOldHitTracks());
         pool.addAll(getFeaturedTracks());
-        pool.addAll(getMoodTracks("CAT_MOOD_CHILL"));
-        pool.addAll(getMoodTracks("CAT_MOOD_ENERGY"));
 
         for (MediaItem item : pool) {
             if (item.mediaMetadata != null) {
