@@ -498,9 +498,12 @@ public class MusicPlaybackService extends MediaLibraryService {
         List<MediaItem> items = new ArrayList<>();
         if ("ROOT".equals(parentId)) {
             items.add(createCategoryItem("CAT_RECENT", "Recently Played", "Your recent listening history", MediaMetadata.FOLDER_TYPE_TITLES));
+            items.add(createCategoryItem("CAT_OLD_HITS", "Old Hits & Evergreen Classics", "Timeless 70s, 80s, 90s & Golden Era", MediaMetadata.FOLDER_TYPE_PLAYLISTS));
             items.add(createCategoryItem("CAT_TOP_HITS", "Top Hits & Trending", "Most popular tracks on InstaMusic", MediaMetadata.FOLDER_TYPE_PLAYLISTS));
             items.add(createCategoryItem("CAT_MOOD", "AI Mood Mixes", "Chill, Energy, Focus and Party vibes", MediaMetadata.FOLDER_TYPE_PLAYLISTS));
             items.add(createCategoryItem("CAT_FAVORITES", "Favorites & Library", "Saved songs and top tracks", MediaMetadata.FOLDER_TYPE_TITLES));
+        } else if ("CAT_OLD_HITS".equals(parentId)) {
+            items.addAll(getOldHitTracks());
         } else if ("CAT_RECENT".equals(parentId)) {
             List<MusicHistoryDbHelper.TrackInfo> recent = MusicHistoryDbHelper.getInstance(this).getRecentTracks(20);
             if (recent != null && !recent.isEmpty()) {
@@ -525,6 +528,20 @@ public class MusicPlaybackService extends MediaLibraryService {
             items.addAll(getFeaturedTracks());
         }
         return items;
+    }
+
+    private List<MediaItem> getOldHitTracks() {
+        List<MediaItem> list = new ArrayList<>();
+        list.add(createPlayableItem("old_1", "Pal Pal Dil Ke Paas", "Kishore Kumar", "Blackmail", "https://c.saavncdn.com/112/Blackmail-Hindi-1973-20221124115124-500x500.jpg"));
+        list.add(createPlayableItem("old_2", "Tujhe Dekha To", "Lata Mangeshkar, Kumar Sanu", "Dilwale Dulhania Le Jayenge", "https://c.saavncdn.com/326/Dilwale-Dulhania-Le-Jayenge-Hindi-1995-20200924151745-500x500.jpg"));
+        list.add(createPlayableItem("old_3", "Jotheyali Jothe Jotheyali", "S.P. Balasubrahmanyam, S. Janaki", "Geetha - Ilaiyaraaja", "https://c.saavncdn.com/978/Geetha-Kannada-1981-20200806085532-500x500.jpg"));
+        list.add(createPlayableItem("old_4", "O Mere Dil Ke Chain", "Kishore Kumar, R.D. Burman", "Mere Jeevan Saathi", "https://c.saavncdn.com/393/Mere-Jeevan-Saathi-Hindi-1972-20221124115124-500x500.jpg"));
+        list.add(createPlayableItem("old_5", "Chura Liya Hai Tumne Jo Dil Ko", "Asha Bhosle, Mohammed Rafi, R.D. Burman", "Yaadon Ki Baaraat", "https://c.saavncdn.com/123/Yaadon-Ki-Baaraat-Hindi-1973-20221124115124-500x500.jpg"));
+        list.add(createPlayableItem("old_6", "Chinna Chinna Aasai", "Minmini, A.R. Rahman", "Roja", "https://c.saavncdn.com/001/Roja-Tamil-1992-20191024072834-500x500.jpg"));
+        list.add(createPlayableItem("old_7", "Deepangal Pesum", "S.P.B. Charan, Sandhya, Ilaiyaraaja", "Devathai", "https://c.saavncdn.com/492/Devathai-Tamil-1997-20200806112234-500x500.jpg"));
+        list.add(createPlayableItem("old_8", "Bohemian Rhapsody", "Queen", "A Night at the Opera", "https://c.saavncdn.com/514/A-Night-At-The-Opera-English-1975-20191206121434-500x500.jpg"));
+        list.add(createPlayableItem("old_9", "Billie Jean", "Michael Jackson", "Thriller", "https://c.saavncdn.com/832/Thriller-English-1982-20200806141434-500x500.jpg"));
+        return list;
     }
 
     private List<MediaItem> getFeaturedTracks() {

@@ -193,3 +193,18 @@ Inspect active audio focus owner:
 ```bash
 adb shell dumpsys audio | grep -A 8 "Audio Focus"
 ```
+
+
+---
+
+## 8. Old Hits, Golden Era Classics & Deep Search Verification
+
+| ID | Test Scenario | Steps | Expected Result | Pass/Fail |
+|---|---|---|---|---|
+| **OH-01** | **Old Hits 📻 Tab on Home** | Tap the "Old Hits 📻" tab in the top navigation bar of the Home screen. | Dedicated Golden Era station appears with retro banner, 6 carousels (Golden Oldies, Maestro Ilaiyaraaja, SPB Classics, 90s Bollywood, Kishore & Lata, All-Time Legends), and Top 30 Evergreen chart. | [ ] |
+| **OH-02** | **"Play All Golden Hits" One-Tap** | Tap "Play All Golden Hits" button in the Retro Radio Station banner. | Audio playback begins immediately with the first retro track and enqueues all classics in queue. | [ ] |
+| **OH-03** | **Home "For You" Retro Shelves** | Scroll down the "For You" tab on Home. | "📻 Golden Oldies & Evergreen Hits", "🎼 90s & 2000s Nostalgia Rewind", "👑 Maestro Ilaiyaraaja & SPB Classics", and "🌟 Kishore Kumar & Lata Golden Era" appear with high-res artwork. | [ ] |
+| **OH-04** | **Deep Multi-Page Search** | Search for "old hit songs", "SPB hits", "Ilaiyaraaja 80s", or "Kishore Kumar". | Search queries 3 deep pages plus complementary hit queries; returns 80–120+ unique songs without duplicates. | [ ] |
+| **OH-05** | **Retro Quick Filters in Search** | Open Search screen before typing. | Quick filter pills for "Old Hit Songs", "80s Ilaiyaraaja Golden Hits", "SPB Evergreen Classics", "Kishore Kumar Hits", "90s Bollywood", etc. are displayed and clickable. | [ ] |
+| **OH-06** | **Old Hits & Retro Genre Hub** | Tap "Old Hits & Retro" in Browse by Genre on Search screen. | Opens `/genre/oldhits` displaying dozens of classic tracks with 1-tap playback and queueing. | [ ] |
+| **OH-07** | **Android Auto Old Hits Category** | In car display or DHU, browse the media root menu. | "Old Hits & Evergreen Classics" category is listed; tapping opens Kishore Kumar, Lata, SPB, Ilaiyaraaja, AR Rahman, Queen, and MJ classics. | [ ] |
