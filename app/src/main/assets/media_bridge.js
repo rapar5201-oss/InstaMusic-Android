@@ -891,6 +891,27 @@
     setTimeout(sync, 120);
   };
 
+  window.__triggerPlayTrackByName = function(title, artist) {
+    if (!title) return;
+    var cleanTitle = title.trim().toLowerCase();
+    var allItems = document.querySelectorAll("button, [role='button'], tr, li, [class*='track'], [class*='song']");
+    for (var i = 0; i < allItems.length; i++) {
+      var el = allItems[i];
+      var txt = (el.textContent || "").toLowerCase();
+      if (txt.indexOf(cleanTitle) !== -1) {
+        var clickable = el.querySelector("button, [role='button']") || el;
+        try {
+          clickable.click();
+          setTimeout(sync, 150);
+          return;
+        } catch(e) {}
+      }
+    }
+    if (window.__triggerMediaAction) {
+      window.__triggerMediaAction("play");
+    }
+  };
+
   window.__triggerMediaSeek = function(seconds) {
     if (!Number.isFinite(seconds) || seconds < 0) return;
     hookMediaSession();

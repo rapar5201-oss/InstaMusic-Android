@@ -144,9 +144,29 @@ public class MainActivity extends Activity {
             } else if (MusicPlaybackService.ACTION_SEEK.equals(action)) {
                 long posMs = intent.getLongExtra(MusicPlaybackService.EXTRA_SEEK_POSITION_MS, 0L);
                 triggerSeekAction(posMs / 1000.0);
+            } else if (MusicPlaybackService.ACTION_PLAY_TRACK.equals(action)) {
+                String title = intent.getStringExtra(MusicPlaybackService.EXTRA_TITLE);
+                String artist = intent.getStringExtra(MusicPlaybackService.EXTRA_ARTIST);
+                triggerPlayTrack(title, artist);
             }
         }
     };
+
+    private void triggerPlayTrack(String title, String artist) {
+        if (appView == null) return;
+        appView.post(() -> {
+            String safeTitle = (title != null) ? title.replace("'", "\\'") : "";
+            String safeArtist = (artist != null) ? artist.replace("'", "\\'") : "";
+            String js = "(function(){"
+                + "if (window.__triggerPlayTrackByName) {"
+                + "  window.__triggerPlayTrackByName('" + safeTitle + "', '" + safeArtist + "');"
+                + "} else if (window.__triggerMediaAction) {"
+                + "  window.__triggerMediaAction('play');"
+                + "}"
+                + "})()";
+            appView.evaluateJavascript(js, null);
+        });
+    }
 
     private void triggerSeekAction(double seconds) {
         if (appView == null) return;
@@ -224,6 +244,7 @@ public class MainActivity extends Activity {
         filter.addAction(MusicPlaybackService.ACTION_NEXT);
         filter.addAction(MusicPlaybackService.ACTION_PREV);
         filter.addAction(MusicPlaybackService.ACTION_SEEK);
+        filter.addAction(MusicPlaybackService.ACTION_PLAY_TRACK);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(mediaActionReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
         } else {

@@ -38,7 +38,7 @@ jobs:
             "versionCode": ${{ github.run_number }},
             "versionName": "1.0.${{ github.run_number }}",
             "apkUrl": "https://github.com/rapar5201-oss/InstaMusic-Android/releases/download/latest-apk/app-release.apk",
-            "releaseNotes": "Social & Guest Login (Google, Email+Password, 1-tap Guest with no sign up); stylish Loading Soon modal for Create button; Heart Notification Center in header with unread badge and instant track playback; Smart Shuffle tuned to clicked song artist and vibe; and high-res cover art & polished media notification styling."
+            "releaseNotes": "Full Android Auto integration: MediaLibraryService browse hierarchy (Recently Played, Top Hits, AI Mood Mixes, Favorites), car media launcher discovery, remote in-car track playback, and dedicated car notification small icon."
           }
           EOF
 
@@ -56,7 +56,7 @@ jobs:
         with:
           tag_name: latest-apk
           name: InstaMusic latest APK (v1.0.${{ github.run_number }})
-          body: "InstaMusic Android release v1.0.${{ github.run_number }}: Social Login (Google, Email, Guest with no sign-up), Create Button Loading Soon modal, Heart Notification Center in header with unread badge and track playback, Smart Shuffle matching clicked songs, and high-res cover art in media notifications."
+          body: "InstaMusic Android release v1.0.${{ github.run_number }}: Full Android Auto integration via MediaLibraryService & MediaBrowserService, browsable car library (Recently Played, Top Hits, AI Mood Mixes, Favorites), remote car playback, and dedicated automotive notification icon."
           files: |
             app/build/outputs/apk/release/app-release.apk
             app/build/outputs/apk/debug/app-debug.apk

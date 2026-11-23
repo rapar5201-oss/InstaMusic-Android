@@ -106,17 +106,26 @@ This test plan defines the complete verification strategy for InstaMusic's **And
 
 ---
 
-## 7. Test Suite 4: Android Auto Integration
+## 7. Test Suite 4: Android Auto Integration & MediaLibraryService
+
+### Sideloaded APK Setup for Android Auto (Required for Direct APK Installs)
+Because this APK is distributed directly via GitHub Releases and in-app updates rather than Google Play Store, Android Auto requires enabling Unknown Sources in Android Auto Developer Settings on the phone:
+1. Open Android phone **Settings** -> Search for **Android Auto**.
+2. Scroll to the very bottom and tap **Version and permission info** 10 times consecutively to enable **Developer settings**.
+3. Tap the 3-dots menu in the top right -> Select **Developer settings**.
+4. Check **Unknown sources** ("Allow apps from unknown sources to be shown in Android Auto").
+5. Under **Customize launcher**, ensure **InstaMusic** is checked.
+6. Connect to car / head unit or Desktop Head Unit (DHU) via USB or Wireless. InstaMusic will now appear directly on your car screen!
 
 | Test ID | Title | Description | Expected Result | Pass/Fail |
 | :--- | :--- | :--- | :--- | :--- |
-| **TC-AUTO-01** | App Discovery in Android Auto | Connect phone to Android Auto (DHU or in-vehicle display). | InstaMusic icon appears in the car's Media Apps launcher (via `automotive_app_desc.xml`). | |
-| **TC-AUTO-02** | Now Playing Screen Display | Select InstaMusic on car screen while playback is active. | Car screen renders track title, artist name, high-resolution album artwork, and progress bar. | |
-| **TC-AUTO-03** | Car Transport Controls | Tap Next, Previous, and Play/Pause on car touchscreen or steering wheel. | Commands execute instantly without delay or audio dropout. | |
-| **TC-AUTO-04** | Queue / Next Track Item Selection | Select the upcoming track from the car display queue. | Executes `COMMAND_SEEK_TO_MEDIA_ITEM` index 1; advances smoothly to next track. | |
-| **TC-AUTO-05** | Seamless Phone/Car Handover | Disconnect car cable / wireless connection while playing. | Audio pauses gracefully; reconnecting restores session cleanly. | |
-
----
+| **TC-AUTO-01** | App Discovery in Android Auto | Connect phone to Android Auto (DHU or in-vehicle display). | InstaMusic icon appears in the car media launcher via `MediaLibraryService` and `automotive_app_desc.xml`. | |
+| **TC-AUTO-02** | Media Library Browse Tree | Tap InstaMusic on the car screen to browse categories. | Root tabs appear: "Recently Played", "Top Hits & Trending", "AI Mood Mixes", and "Favorites". | |
+| **TC-AUTO-03** | Song Selection from Car Screen | Tap any track from Recently Played or Trending playlists. | Track loads into playback engine, notifies WebView, and begins playing immediately. | |
+| **TC-AUTO-04** | Now Playing Screen Display | View Now Playing screen while playback is active. | Car screen renders track title, artist name, high-resolution album artwork, and progress bar. | |
+| **TC-AUTO-05** | Car Transport Controls | Tap Next, Previous, and Play/Pause on car touchscreen or steering wheel. | Commands execute instantly without delay or audio dropout. | |
+| **TC-AUTO-06** | Queue / Next Track Item Selection | Select the upcoming track from the car display queue. | Advances smoothly to next track with full metadata and artwork. | |
+| **TC-AUTO-07** | Seamless Phone/Car Handover | Disconnect car cable / wireless connection while playing. | Audio pauses gracefully; reconnecting restores session cleanly. | |
 
 ## 8. Test Suite 5: Background Continuity & Power Management
 

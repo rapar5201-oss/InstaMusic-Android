@@ -30,9 +30,11 @@ import androidx.media3.common.SimpleBasePlayer;
 import androidx.media3.common.Tracks;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.session.DefaultMediaNotificationProvider;
+import androidx.media3.session.LibraryResult;
+import androidx.media3.session.MediaLibraryService;
 import androidx.media3.session.MediaSession;
-import androidx.media3.session.MediaSessionService;
 import androidx.media3.session.SessionCommands;
+import com.google.common.collect.ImmutableList;
 
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
@@ -45,7 +47,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 @OptIn(markerClass = UnstableApi.class)
-public class MusicPlaybackService extends MediaSessionService {
+public class MusicPlaybackService extends MediaLibraryService {
     public static final String CHANNEL_ID = "instamusic_playback_v2";
     public static final int NOTIFICATION_ID = 101;
 
@@ -59,6 +61,7 @@ public class MusicPlaybackService extends MediaSessionService {
     public static final String ACTION_PREV = "com.instamusic.app.PREV";
     public static final String ACTION_NEXT = "com.instamusic.app.NEXT";
     public static final String ACTION_SEEK = "com.instamusic.app.SEEK";
+    public static final String ACTION_PLAY_TRACK = "com.instamusic.app.PLAY_TRACK";
 
     public static final String EXTRA_TITLE = "title";
     public static final String EXTRA_ARTIST = "artist";
@@ -79,7 +82,7 @@ public class MusicPlaybackService extends MediaSessionService {
         }
     };
 
-    private MediaSession mediaSession;
+    private MediaLibrarySession mediaSession;
     private InstaMusicPlayer customPlayer;
 
     private String currentTitle = "INSTA MUSIC";
@@ -297,27 +300,109 @@ public class MusicPlaybackService extends MediaSessionService {
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0
         );
 
-        mediaSession = new MediaSession.Builder(this, customPlayer)
-            .setSessionActivity(pOpenApp)
-            .setCallback(new MediaSession.Callback() {
-                @Override
-                public MediaSession.ConnectionResult onConnect(MediaSession session, MediaSession.ControllerInfo controller) {
-                    MediaSession.ConnectionResult defaultResult = MediaSession.Callback.super.onConnect(session, controller);
-                    SessionCommands.Builder sessionCommands = defaultResult.availableSessionCommands.buildUpon();
-                    Player.Commands.Builder playerCommands = defaultResult.availablePlayerCommands.buildUpon();
-                    playerCommands.add(Player.COMMAND_PLAY_PAUSE);
-                    playerCommands.add(Player.COMMAND_SEEK_TO_NEXT);
-                    playerCommands.add(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM);
-                    playerCommands.add(Player.COMMAND_SEEK_TO_PREVIOUS);
-                    playerCommands.add(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM);
-                    playerCommands.add(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM);
-                    playerCommands.add(Player.COMMAND_SEEK_TO_MEDIA_ITEM);
-                    playerCommands.add(Player.COMMAND_SEEK_BACK);
-                    playerCommands.add(Player.COMMAND_SEEK_FORWARD);
-                    playerCommands.add(Player.COMMAND_STOP);
-                    return MediaSession.ConnectionResult.accept(sessionCommands.build(), playerCommands.build());
+        MediaLibrarySession.Callback librarySessionCallback = new MediaLibrarySession.Callback() {
+            @Override
+            public MediaSession.ConnectionResult onConnect(MediaSession session, MediaSession.ControllerInfo controller) {
+                MediaSession.ConnectionResult defaultResult = MediaLibrarySession.Callback.super.onConnect(session, controller);
+                SessionCommands.Builder sessionCommands = defaultResult.availableSessionCommands.buildUpon();
+                Player.Commands.Builder playerCommands = defaultResult.availablePlayerCommands.buildUpon();
+                playerCommands.add(Player.COMMAND_PLAY_PAUSE);
+                playerCommands.add(Player.COMMAND_SEEK_TO_NEXT);
+                playerCommands.add(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM);
+                playerCommands.add(Player.COMMAND_SEEK_TO_PREVIOUS);
+                playerCommands.add(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM);
+                playerCommands.add(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM);
+                playerCommands.add(Player.COMMAND_SEEK_TO_MEDIA_ITEM);
+                playerCommands.add(Player.COMMAND_SEEK_BACK);
+                playerCommands.add(Player.COMMAND_SEEK_FORWARD);
+                playerCommands.add(Player.COMMAND_STOP);
+                playerCommands.add(Player.COMMAND_SET_MEDIA_ITEM);
+                playerCommands.add(Player.COMMAND_CHANGE_MEDIA_ITEMS);
+                return MediaSession.ConnectionResult.accept(sessionCommands.build(), playerCommands.build());
+            }
+
+            @Override
+            public ListenableFuture<LibraryResult<MediaItem>> onGetLibraryRoot(
+                    MediaLibrarySession session,
+                    MediaSession.ControllerInfo browser,
+                    @Nullable LibraryParams params) {
+                MediaMetadata rootMeta = new MediaMetadata.Builder()
+                        .setTitle("InstaMusic")
+                        .setIsBrowsable(true)
+                        .setIsPlayable(false)
+                        .setFolderType(MediaMetadata.FOLDER_TYPE_MIXED)
+                        .build();
+
+                MediaItem rootItem = new MediaItem.Builder()
+                        .setMediaId("ROOT")
+                        .setMediaMetadata(rootMeta)
+                        .build();
+
+                return Futures.immediateFuture(LibraryResult.ofItem(rootItem, params));
+            }
+
+            @Override
+            public ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> onGetChildren(
+                    MediaLibrarySession session,
+                    MediaSession.ControllerInfo browser,
+                    String parentId,
+                    int page,
+                    int pageSize,
+                    @Nullable LibraryParams params) {
+                List<MediaItem> items = getMediaItemsForParent(parentId);
+                return Futures.immediateFuture(LibraryResult.ofItemList(ImmutableList.copyOf(items), params));
+            }
+
+            @Override
+            public ListenableFuture<LibraryResult<MediaItem>> onGetItem(
+                    MediaLibrarySession session,
+                    MediaSession.ControllerInfo browser,
+                    String mediaId) {
+                MediaItem item = findMediaItemById(mediaId);
+                if (item != null) {
+                    return Futures.immediateFuture(LibraryResult.ofItem(item, null));
                 }
-            })
+                return Futures.immediateFuture(LibraryResult.ofError(LibraryResult.RESULT_ERROR_BAD_VALUE));
+            }
+
+            @Override
+            public ListenableFuture<LibraryResult<Void>> onSubscribe(
+                    MediaLibrarySession session,
+                    MediaSession.ControllerInfo browser,
+                    String parentId,
+                    @Nullable LibraryParams params) {
+                return Futures.immediateFuture(LibraryResult.ofVoid());
+            }
+
+            @Override
+            public ListenableFuture<List<MediaItem>> onAddMediaItems(
+                    MediaSession mediaSession,
+                    MediaSession.ControllerInfo controller,
+                    List<MediaItem> mediaItems) {
+                if (mediaItems != null && !mediaItems.isEmpty()) {
+                    handleTrackSelectedFromCar(mediaItems.get(0));
+                }
+                return Futures.immediateFuture(mediaItems);
+            }
+
+            @Override
+            public ListenableFuture<List<MediaItem>> onSetMediaItems(
+                    MediaSession mediaSession,
+                    MediaSession.ControllerInfo controller,
+                    List<MediaItem> mediaItems,
+                    int startIndex,
+                    long startPositionMs) {
+                if (mediaItems != null && !mediaItems.isEmpty()) {
+                    int idx = (startIndex >= 0 && startIndex < mediaItems.size()) ? startIndex : 0;
+                    handleTrackSelectedFromCar(mediaItems.get(idx));
+                }
+                return Futures.immediateFuture(mediaItems);
+            }
+        };
+
+        mediaSession = new MediaLibrarySession.Builder(this, customPlayer, librarySessionCallback)
+            .setSessionActivity(pOpenApp)
+            .setId("InstaMusicSession")
             .build();
 
         addSession(mediaSession);
@@ -332,7 +417,7 @@ public class MusicPlaybackService extends MediaSessionService {
 
     @Nullable
     @Override
-    public MediaSession onGetSession(MediaSession.ControllerInfo controllerInfo) {
+    public MediaLibrarySession onGetSession(MediaSession.ControllerInfo controllerInfo) {
         return mediaSession;
     }
 
@@ -406,6 +491,135 @@ public class MusicPlaybackService extends MediaSessionService {
             if (nm != null) {
                 nm.createNotificationChannel(channel);
             }
+        }
+    }
+
+    private List<MediaItem> getMediaItemsForParent(String parentId) {
+        List<MediaItem> items = new ArrayList<>();
+        if ("ROOT".equals(parentId)) {
+            items.add(createCategoryItem("CAT_RECENT", "Recently Played", "Your recent listening history", MediaMetadata.FOLDER_TYPE_TITLES));
+            items.add(createCategoryItem("CAT_TOP_HITS", "Top Hits & Trending", "Most popular tracks on InstaMusic", MediaMetadata.FOLDER_TYPE_PLAYLISTS));
+            items.add(createCategoryItem("CAT_MOOD", "AI Mood Mixes", "Chill, Energy, Focus and Party vibes", MediaMetadata.FOLDER_TYPE_PLAYLISTS));
+            items.add(createCategoryItem("CAT_FAVORITES", "Favorites & Library", "Saved songs and top tracks", MediaMetadata.FOLDER_TYPE_TITLES));
+        } else if ("CAT_RECENT".equals(parentId)) {
+            List<MusicHistoryDbHelper.TrackInfo> recent = MusicHistoryDbHelper.getInstance(this).getRecentTracks(20);
+            if (recent != null && !recent.isEmpty()) {
+                for (MusicHistoryDbHelper.TrackInfo track : recent) {
+                    items.add(createPlayableItem("recent_" + track.id, track.title, track.artist, track.album, track.artworkUrl));
+                }
+            } else {
+                items.addAll(getFeaturedTracks());
+            }
+        } else if ("CAT_TOP_HITS".equals(parentId)) {
+            items.addAll(getFeaturedTracks());
+        } else if ("CAT_MOOD".equals(parentId)) {
+            items.add(createPlayableItem("mood_1", "Tamil Vibe Station", "Anirudh, AR Rahman, Yuvan", "AI Mood Mix", "https://c.saavncdn.com/222/Leo-Tamil-2023-20231019104033-500x500.jpg"));
+            items.add(createPlayableItem("mood_2", "Late Night Chill", "InstaMusic AI", "Chillout", "https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=500&h=500&fit=crop"));
+            items.add(createPlayableItem("mood_3", "High Energy Workout", "InstaMusic AI", "Workout", "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&h=500&fit=crop"));
+            items.add(createPlayableItem("mood_4", "Focus & Deep Work", "InstaMusic AI", "Ambient", "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=500&h=500&fit=crop"));
+        } else if ("CAT_FAVORITES".equals(parentId)) {
+            MusicHistoryDbHelper.TrackInfo fav = MusicHistoryDbHelper.getInstance(this).getFavoriteOrRecentTrack();
+            if (fav != null) {
+                items.add(createPlayableItem("fav_" + fav.id, fav.title, fav.artist, fav.album, fav.artworkUrl));
+            }
+            items.addAll(getFeaturedTracks());
+        }
+        return items;
+    }
+
+    private List<MediaItem> getFeaturedTracks() {
+        List<MediaItem> list = new ArrayList<>();
+        list.add(createPlayableItem("feat_1", "Hukum - Thalaivar Alappara", "Anirudh Ravichander", "Jailer", "https://c.saavncdn.com/264/Jailer-Tamil-2023-20230728194411-500x500.jpg"));
+        list.add(createPlayableItem("feat_2", "Arabic Kuthu - Beast Mode", "Anirudh Ravichander, Jonita Gandhi", "Beast", "https://c.saavncdn.com/352/Arabic-Kuthu-From-Beast-Tamil-2022-20220214174005-500x500.jpg"));
+        list.add(createPlayableItem("feat_3", "Naa Ready", "Thalapathy Vijay, Anirudh", "Leo", "https://c.saavncdn.com/222/Leo-Tamil-2023-20231019104033-500x500.jpg"));
+        list.add(createPlayableItem("feat_4", "Kaavaalaa", "Shilpa Rao, Anirudh Ravichander", "Jailer", "https://c.saavncdn.com/264/Jailer-Tamil-2023-20230728194411-500x500.jpg"));
+        list.add(createPlayableItem("feat_5", "Enjoy Enjaami", "Dhee ft. Arivu, Santhosh Narayanan", "Enjoy Enjaami", "https://c.saavncdn.com/022/Enjoy-Enjaami-Tamil-2021-20210305141011-500x500.jpg"));
+        list.add(createPlayableItem("feat_6", "Vathi Coming", "Anirudh Ravichander, Gana Balachandar", "Master", "https://c.saavncdn.com/835/Master-Tamil-2020-20200316091404-500x500.jpg"));
+        return list;
+    }
+
+    private MediaItem createCategoryItem(String id, String title, String subtitle, int folderType) {
+        MediaMetadata metadata = new MediaMetadata.Builder()
+                .setTitle(title)
+                .setSubtitle(subtitle)
+                .setIsBrowsable(true)
+                .setIsPlayable(false)
+                .setFolderType(folderType)
+                .build();
+        return new MediaItem.Builder()
+                .setMediaId(id)
+                .setMediaMetadata(metadata)
+                .build();
+    }
+
+    private MediaItem createPlayableItem(String id, String title, String artist, String album, String artworkUrl) {
+        MediaMetadata.Builder meta = new MediaMetadata.Builder()
+                .setTitle(title)
+                .setArtist(artist)
+                .setAlbumTitle(album)
+                .setIsBrowsable(false)
+                .setIsPlayable(true)
+                .setFolderType(MediaMetadata.FOLDER_TYPE_NONE);
+
+        if (artworkUrl != null && !artworkUrl.trim().isEmpty() && artworkUrl.startsWith("http")) {
+            try {
+                meta.setArtworkUri(android.net.Uri.parse(artworkUrl));
+            } catch (Exception ignored) {}
+        }
+
+        return new MediaItem.Builder()
+                .setMediaId(id)
+                .setMediaMetadata(meta.build())
+                .build();
+    }
+
+    private MediaItem findMediaItemById(String mediaId) {
+        if (mediaId == null) return null;
+        if ("ROOT".equals(mediaId)) {
+            return new MediaItem.Builder()
+                    .setMediaId("ROOT")
+                    .setMediaMetadata(new MediaMetadata.Builder().setTitle("InstaMusic").setIsBrowsable(true).setIsPlayable(false).setFolderType(MediaMetadata.FOLDER_TYPE_MIXED).build())
+                    .build();
+        }
+        List<MediaItem> all = new ArrayList<>();
+        all.addAll(getMediaItemsForParent("ROOT"));
+        all.addAll(getMediaItemsForParent("CAT_RECENT"));
+        all.addAll(getMediaItemsForParent("CAT_TOP_HITS"));
+        all.addAll(getMediaItemsForParent("CAT_MOOD"));
+        all.addAll(getMediaItemsForParent("CAT_FAVORITES"));
+        for (MediaItem item : all) {
+            if (mediaId.equals(item.mediaId)) {
+                return item;
+            }
+        }
+        return null;
+    }
+
+    private void handleTrackSelectedFromCar(MediaItem target) {
+        if (target == null || target.mediaMetadata == null) return;
+        CharSequence titleSeq = target.mediaMetadata.title;
+        CharSequence artistSeq = target.mediaMetadata.artist;
+        final String title = titleSeq != null ? titleSeq.toString() : "";
+        final String artist = artistSeq != null ? artistSeq.toString() : "";
+        final String album = target.mediaMetadata.albumTitle != null ? target.mediaMetadata.albumTitle.toString() : "";
+        final String artUrl = target.mediaMetadata.artworkUri != null ? target.mediaMetadata.artworkUri.toString() : "";
+
+        if (!title.isEmpty()) {
+            currentTitle = title;
+            currentArtist = !artist.isEmpty() ? artist : "InstaMusic";
+            currentAlbum = album;
+            currentArtworkUrl = artUrl;
+            isPlaying = true;
+            isMusicCurrentlyPlaying = true;
+            acquireWakeLock();
+            registerNoisyReceiver();
+            requestPlayerStateUpdate();
+
+            Intent playIntent = new Intent(ACTION_PLAY_TRACK);
+            playIntent.putExtra(EXTRA_TITLE, title);
+            playIntent.putExtra(EXTRA_ARTIST, artist);
+            playIntent.setPackage(getPackageName());
+            sendBroadcast(playIntent);
         }
     }
 

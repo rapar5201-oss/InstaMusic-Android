@@ -181,6 +181,34 @@ public class MusicHistoryDbHelper extends SQLiteOpenHelper {
         return null;
     }
 
+    public synchronized java.util.List<TrackInfo> getRecentTracks(int limit) {
+        java.util.List<TrackInfo> list = new java.util.ArrayList<>();
+        SQLiteDatabase db = null;
+        Cursor cursor = null;
+        try {
+            db = getReadableDatabase();
+            cursor = db.query(
+                    TABLE_TRACKS,
+                    null,
+                    null,
+                    null,
+                    null, null,
+                    COLUMN_LAST_PLAYED + " DESC",
+                    String.valueOf(Math.max(1, limit))
+            );
+            if (cursor != null && cursor.moveToFirst()) {
+                do {
+                    list.add(cursorToTrack(cursor));
+                } while (cursor.moveToNext());
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error fetching recent tracks: " + e.getMessage(), e);
+        } finally {
+            if (cursor != null) cursor.close();
+        }
+        return list;
+    }
+
     public synchronized int getTrackCount() {
         SQLiteDatabase db = null;
         Cursor cursor = null;
