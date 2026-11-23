@@ -35,11 +35,24 @@ public class MainActivity extends Activity {
     private static final long BACK_EXIT_MS = 2000;
     private static final int PERMISSION_REQ_NOTIFICATIONS = 1001;
 
+    private static java.lang.ref.WeakReference<MainActivity> sInstanceRef;
+
+    public static MainActivity getInstance() {
+        return sInstanceRef != null ? sInstanceRef.get() : null;
+    }
+
     private WebView appView, splashView;
     private LinearLayout errorLayout;
     private boolean pageReady = false, splashDone = false, splashHidden = false;
     private long lastBackPressed = 0;
     private final Handler handler = new Handler(Looper.getMainLooper());
+
+    private String pendingPlayTitle = null;
+    private String pendingPlayArtist = null;
+
+    public void playTrackDirectly(String title, String artist) {
+        triggerPlayTrack(title, artist);
+    }
 
     public class SplashBridge {
         @JavascriptInterface
@@ -213,9 +226,11 @@ public class MainActivity extends Activity {
     @Override
     public void onCreate(Bundle state) {
         super.onCreate(state);
+        sInstanceRef = new java.lang.ref.WeakReference<>(this);
         OfflineCacheManager.clearStaleCache(this);
         MusicReminderScheduler.schedulePeriodicReminders(this);
         handleReminderIntent(getIntent());
+        handlePlayTrackIntent(getIntent());
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         Window w = getWindow();
         w.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
@@ -277,6 +292,24 @@ public class MainActivity extends Activity {
             UpdateManager.checkForUpdates(this, true);
         }
         handleReminderIntent(intent);
+        handlePlayTrackIntent(intent);
+    }
+
+    private void handlePlayTrackIntent(Intent intent) {
+        if (intent == null) return;
+        if (MusicPlaybackService.ACTION_PLAY_TRACK.equals(intent.getAction()) || intent.hasExtra(MusicPlaybackService.EXTRA_TITLE)) {
+            String title = intent.getStringExtra(MusicPlaybackService.EXTRA_TITLE);
+            String artist = intent.getStringExtra(MusicPlaybackService.EXTRA_ARTIST);
+            if (title != null && !title.trim().isEmpty()) {
+                pendingPlayTitle = title;
+                pendingPlayArtist = artist;
+                if (pageReady && appView != null) {
+                    triggerPlayTrack(title, artist);
+                    pendingPlayTitle = null;
+                    pendingPlayArtist = null;
+                }
+            }
+        }
     }
 
     @Override
@@ -406,6 +439,11 @@ public class MainActivity extends Activity {
         splashHidden = true;
         if (errorLayout.getVisibility() != View.VISIBLE) appView.setVisibility(View.VISIBLE);
         splashView.animate().alpha(0f).setDuration(380).withEndAction(() -> splashView.setVisibility(View.GONE)).start();
+        if (pendingPlayTitle != null) {
+            triggerPlayTrack(pendingPlayTitle, pendingPlayArtist);
+            pendingPlayTitle = null;
+            pendingPlayArtist = null;
+        }
     }
 
     private void reloadApp() {
@@ -472,6 +510,9 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        if (sInstanceRef != null && sInstanceRef.get() == this) {
+            sInstanceRef = null;
+        }
         try {
             unregisterReceiver(mediaActionReceiver);
         } catch (Exception ignored) {}

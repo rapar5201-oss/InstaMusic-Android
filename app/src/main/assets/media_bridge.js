@@ -759,6 +759,16 @@
         if (ev !== 'timeupdate') {
           scheduleSync();
         }
+        if (ev === 'ended') {
+          setTimeout(function() {
+            var active = findPlayingAudio();
+            if (!active || active.paused || active.ended) {
+              if (typeof window.__triggerMediaAction === 'function') {
+                window.__triggerMediaAction('nexttrack');
+              }
+            }
+          }, 450);
+        }
       });
     });
 
@@ -893,6 +903,14 @@
 
   window.__triggerPlayTrackByName = function(title, artist) {
     if (!title) return;
+    if (typeof window.__instamusic_playByName === 'function') {
+      try {
+        if (window.__instamusic_playByName(title, artist)) {
+          setTimeout(sync, 150);
+          return;
+        }
+      } catch(e) {}
+    }
     var cleanTitle = title.trim().toLowerCase();
     var allItems = document.querySelectorAll("button, [role='button'], tr, li, [class*='track'], [class*='song']");
     for (var i = 0; i < allItems.length; i++) {

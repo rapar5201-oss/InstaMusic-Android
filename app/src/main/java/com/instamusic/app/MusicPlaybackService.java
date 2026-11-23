@@ -398,6 +398,25 @@ public class MusicPlaybackService extends MediaLibraryService {
                 }
                 return MediaLibrarySession.Callback.super.onSetMediaItems(mediaSession, controller, mediaItems, startIndex, startPositionMs);
             }
+
+            @Override
+            public ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> onSearch(
+                    MediaLibrarySession session,
+                    MediaSession.ControllerInfo browser,
+                    String query,
+                    @Nullable LibraryParams params) {
+                List<MediaItem> matches = searchTracks(query);
+                return Futures.immediateFuture(LibraryResult.ofItemList(matches, params));
+            }
+
+            @Override
+            public ListenableFuture<MediaSession.MediaItemsWithStartPosition> onPlaybackResumption(
+                    MediaSession mediaSession,
+                    MediaSession.ControllerInfo controller) {
+                List<MediaItem> tracks = getOldHitTracks();
+                if (tracks.isEmpty()) tracks = getFeaturedTracks();
+                return Futures.immediateFuture(new MediaSession.MediaItemsWithStartPosition(tracks, 0, 0L));
+            }
         };
 
         mediaSession = new MediaLibrarySession.Builder(this, customPlayer, librarySessionCallback)
@@ -431,7 +450,10 @@ public class MusicPlaybackService extends MediaLibraryService {
         }
     }
 
+    private final Runnable releaseWakeLockRunnable = this::releaseWakeLockNow;
+
     private void acquireWakeLock() {
+        mainHandler.removeCallbacks(releaseWakeLockRunnable);
         try {
             if (wakeLock == null) {
                 PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
@@ -447,6 +469,12 @@ public class MusicPlaybackService extends MediaLibraryService {
     }
 
     private void releaseWakeLock() {
+        // Keep CPU awake for 25s grace period during track-to-track transitions & autoplay
+        mainHandler.removeCallbacks(releaseWakeLockRunnable);
+        mainHandler.postDelayed(releaseWakeLockRunnable, 25000L);
+    }
+
+    private void releaseWakeLockNow() {
         try {
             if (wakeLock != null && wakeLock.isHeld()) {
                 wakeLock.release();
@@ -494,17 +522,42 @@ public class MusicPlaybackService extends MediaLibraryService {
         }
     }
 
+    private List<MediaItem> searchTracks(String query) {
+        List<MediaItem> results = new ArrayList<>();
+        if (query == null || query.trim().isEmpty()) {
+            return getOldHitTracks();
+        }
+        String q = query.toLowerCase().trim();
+        List<MediaItem> pool = new ArrayList<>();
+        pool.addAll(getOldHitTracks());
+        pool.addAll(getFeaturedTracks());
+        pool.addAll(getMoodTracks("CAT_MOOD_CHILL"));
+        pool.addAll(getMoodTracks("CAT_MOOD_ENERGY"));
+
+        for (MediaItem item : pool) {
+            if (item.mediaMetadata != null) {
+                String t = item.mediaMetadata.title != null ? item.mediaMetadata.title.toString().toLowerCase() : "";
+                String a = item.mediaMetadata.artist != null ? item.mediaMetadata.artist.toString().toLowerCase() : "";
+                String al = item.mediaMetadata.albumTitle != null ? item.mediaMetadata.albumTitle.toString().toLowerCase() : "";
+                if (t.contains(q) || a.contains(q) || al.contains(q)) {
+                    results.add(item);
+                }
+            }
+        }
+        return results.isEmpty() ? getOldHitTracks() : results;
+    }
+
     private List<MediaItem> getMediaItemsForParent(String parentId) {
         List<MediaItem> items = new ArrayList<>();
-        if ("ROOT".equals(parentId)) {
+        if (parentId == null || parentId.isEmpty() || "ROOT".equalsIgnoreCase(parentId) || "/".equals(parentId) || parentId.startsWith("ROOT")) {
             items.add(createCategoryItem("CAT_RECENT", "Recently Played", "Your recent listening history", MediaMetadata.FOLDER_TYPE_TITLES));
             items.add(createCategoryItem("CAT_OLD_HITS", "Old Hits & Evergreen Classics", "Timeless 70s, 80s, 90s & Golden Era", MediaMetadata.FOLDER_TYPE_PLAYLISTS));
             items.add(createCategoryItem("CAT_TOP_HITS", "Top Hits & Trending", "Most popular tracks on InstaMusic", MediaMetadata.FOLDER_TYPE_PLAYLISTS));
             items.add(createCategoryItem("CAT_MOOD", "AI Mood Mixes", "Chill, Energy, Focus and Party vibes", MediaMetadata.FOLDER_TYPE_PLAYLISTS));
             items.add(createCategoryItem("CAT_FAVORITES", "Favorites & Library", "Saved songs and top tracks", MediaMetadata.FOLDER_TYPE_TITLES));
-        } else if ("CAT_OLD_HITS".equals(parentId)) {
+        } else if ("CAT_OLD_HITS".equalsIgnoreCase(parentId)) {
             items.addAll(getOldHitTracks());
-        } else if ("CAT_RECENT".equals(parentId)) {
+        } else if ("CAT_RECENT".equalsIgnoreCase(parentId)) {
             List<MusicHistoryDbHelper.TrackInfo> recent = MusicHistoryDbHelper.getInstance(this).getRecentTracks(20);
             if (recent != null && !recent.isEmpty()) {
                 for (MusicHistoryDbHelper.TrackInfo track : recent) {
@@ -513,14 +566,14 @@ public class MusicPlaybackService extends MediaLibraryService {
             } else {
                 items.addAll(getFeaturedTracks());
             }
-        } else if ("CAT_TOP_HITS".equals(parentId)) {
+        } else if ("CAT_TOP_HITS".equalsIgnoreCase(parentId)) {
             items.addAll(getFeaturedTracks());
-        } else if ("CAT_MOOD".equals(parentId)) {
+        } else if ("CAT_MOOD".equalsIgnoreCase(parentId)) {
             items.add(createPlayableItem("mood_1", "Tamil Vibe Station", "Anirudh, AR Rahman, Yuvan", "AI Mood Mix", "https://c.saavncdn.com/222/Leo-Tamil-2023-20231019104033-500x500.jpg"));
             items.add(createPlayableItem("mood_2", "Late Night Chill", "InstaMusic AI", "Chillout", "https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=500&h=500&fit=crop"));
             items.add(createPlayableItem("mood_3", "High Energy Workout", "InstaMusic AI", "Workout", "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&h=500&fit=crop"));
             items.add(createPlayableItem("mood_4", "Focus & Deep Work", "InstaMusic AI", "Ambient", "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=500&h=500&fit=crop"));
-        } else if ("CAT_FAVORITES".equals(parentId)) {
+        } else if ("CAT_FAVORITES".equalsIgnoreCase(parentId)) {
             MusicHistoryDbHelper.TrackInfo fav = MusicHistoryDbHelper.getInstance(this).getFavoriteOrRecentTrack();
             if (fav != null) {
                 items.add(createPlayableItem("fav_" + fav.id, fav.title, fav.artist, fav.album, fav.artworkUrl));
@@ -631,6 +684,20 @@ public class MusicPlaybackService extends MediaLibraryService {
             acquireWakeLock();
             registerNoisyReceiver();
             requestPlayerStateUpdate();
+
+            MainActivity activity = MainActivity.getInstance();
+            if (activity != null) {
+                activity.playTrackDirectly(title, artist);
+            } else {
+                try {
+                    Intent launchIntent = new Intent(this, MainActivity.class);
+                    launchIntent.setAction(ACTION_PLAY_TRACK);
+                    launchIntent.putExtra(EXTRA_TITLE, title);
+                    launchIntent.putExtra(EXTRA_ARTIST, artist);
+                    launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                    startActivity(launchIntent);
+                } catch (Exception ignored) {}
+            }
 
             Intent playIntent = new Intent(ACTION_PLAY_TRACK);
             playIntent.putExtra(EXTRA_TITLE, title);
@@ -934,7 +1001,8 @@ public class MusicPlaybackService extends MediaLibraryService {
 
     @Override
     public void onDestroy() {
-        releaseWakeLock();
+        mainHandler.removeCallbacks(releaseWakeLockRunnable);
+        releaseWakeLockNow();
         unregisterNoisyReceiver();
         if (mediaSession != null) {
             removeSession(mediaSession);

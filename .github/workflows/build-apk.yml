@@ -38,7 +38,7 @@ jobs:
             "versionCode": ${{ github.run_number }},
             "versionName": "1.0.${{ github.run_number }}",
             "apkUrl": "https://github.com/rapar5201-oss/InstaMusic-Android/releases/download/latest-apk/app-release.apk",
-            "releaseNotes": "Full Android Auto integration: MediaLibraryService browse hierarchy (Recently Played, Top Hits, AI Mood Mixes, Favorites), car media launcher discovery, remote in-car track playback, and dedicated car notification small icon."
+            "releaseNotes": "Continuous vibe-matched autoplay, intelligent track recommendation engine, enhanced Android Auto car compatibility across all phone models (MediaSessionService & MediaButton intent filters, WakeLock grace period, car search & direct playback routing)."
           }
           EOF
 
