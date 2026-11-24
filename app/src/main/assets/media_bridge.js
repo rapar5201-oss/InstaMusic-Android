@@ -618,7 +618,7 @@
     var labelText = q.online ? q.label : 'Offline';
     var percentText = q.online ? (q.percent + '%') : 'Offline';
 
-    var accessibilityText = q.online ? 
+    var accessibilityText = q.online ?
       ('Connection quality: ' + q.percent + '% ' + q.label + '. Movable indicator. Long press to hide.') :
       'App is offline. Saved Library is ready. Movable indicator. Long press to hide.';
     chip.setAttribute('aria-label', accessibilityText);
@@ -1094,72 +1094,185 @@
 
   setInterval(sync, 1000);
 
-  // Global stylish Loading Soon modal for Create button
-  window.__im_show_create_loading_soon = function() {
-    var id = "__im_create_loading_soon_modal";
+    // Top-to-bottom smooth badge notification 📛
+  window.__im_show_smooth_badge = function(title, message, icon) {
+    var id = "__im_top_smooth_badge";
     var existing = document.getElementById(id);
     if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
 
-    var modal = document.createElement("div");
-    modal.id = id;
-    modal.setAttribute("role", "dialog");
-    modal.setAttribute("aria-modal", "true");
-    modal.style.cssText = [
-      "position:fixed;inset:0;z-index:999999;",
-      "background:rgba(5,8,13,0.85);backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);",
-      "display:flex;align-items:center;justify-content:center;padding:20px;",
-      "animation:imSmoothSwagEntrance 0.35s cubic-bezier(0.16,1,0.3,1) forwards;"
+    var badge = document.createElement("div");
+    badge.id = id;
+    badge.setAttribute("role", "alert");
+    badge.style.cssText = [
+      "position:fixed;top:16px;left:50%;transform:translate(-50%, -100px);z-index:9999999;",
+      "width:calc(100% - 32px);max-width:390px;",
+      "background:rgba(18,22,34,0.95);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);",
+      "border:1.5px solid rgba(255,87,34,0.45);border-radius:24px;padding:12px 16px;",
+      "box-shadow:0 16px 40px rgba(0,0,0,0.7),0 0 25px rgba(255,87,34,0.25);",
+      "display:flex;align-items:center;gap:12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;",
+      "animation:imBadgeSlideDown 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;",
+      "cursor:pointer;-webkit-tap-highlight-color:transparent;"
     ].join("");
 
-    modal.innerHTML = [
-      "<div style=\"position:relative;width:100%;max-width:380px;background:linear-gradient(145deg, #131722, #0A0D14);border:1px solid rgba(255,255,255,0.18);border-radius:28px;padding:28px 24px;text-align:center;box-shadow:0 24px 60px rgba(0,0,0,0.8),inset 0 1px 0 rgba(255,255,255,0.15);overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;\">",
-      "  <div style=\"position:absolute;top:-40px;left:50%;transform:translateX(-50%);width:180px;height:180px;background:radial-gradient(circle, rgba(255,87,34,0.35) 0%, rgba(225,29,72,0) 70%);filter:blur(30px);pointer-events:none;\"></div>",
-      "  <div style=\"position:relative;display:inline-flex;align-items:center;justify-content:center;width:64px;height:64px;border-radius:20px;background:linear-gradient(135deg, #FF5722, #E11D48);box-shadow:0 8px 24px rgba(255,87,34,0.45);margin-bottom:16px;\">",
-      "    <svg width=\"30\" height=\"30\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#FFFFFF\" stroke-width=\"2.3\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 2v20\"></path><path d=\"M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6\"></path></svg>",
-      "  </div>",
-      "  <div style=\"display:inline-block;padding:4px 12px;border-radius:9999px;background:rgba(255,87,34,0.15);border:1px solid rgba(255,87,34,0.35);color:#FF6B35;font-size:11px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;margin-bottom:12px;\">Creation Studio</div>",
-      "  <h2 style=\"color:#FFFFFF;font-size:24px;font-weight:800;letter-spacing:-0.5px;margin:0 0 10px 0;\">Loading Soon</h2>",
-      "  <p style=\"color:#9CA3AF;font-size:13.5px;line-height:1.55;margin:0 0 24px 0;\">We're crafting the InstaMusic Studio! Soon you will be able to generate AI music moments, remix songs, record original audio, and share custom playlists.</p>",
-      "  <button id=\"__im_btn_close_loading_soon\" style=\"width:100%;height:48px;border-radius:16px;background:linear-gradient(135deg, #FF5722, #E11D48);color:#FFFFFF;border:none;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 8px 24px rgba(255,87,34,0.35);transition:transform 0.15s,opacity 0.15s;outline:none;\">Got it, can't wait!</button>",
-      "</div>"
+    var ico = icon || "📛";
+    var t = title || "Coming Soon";
+    var m = message || "This feature is currently in production and launching in the next release!";
+
+    badge.innerHTML = [
+      '<div style="flex-shrink:0;width:38px;height:38px;border-radius:14px;background:linear-gradient(135deg, rgba(255,87,34,0.25), rgba(225,29,72,0.25));border:1px solid rgba(255,87,34,0.4);display:flex;align-items:center;justify-content:center;font-size:20px;">' + ico + '</div>',
+      '<div style="flex:1;min-width:0;">',
+      '  <div style="display:flex;align-items:center;gap:6px;">',
+      '    <span style="color:#FFFFFF;font-size:13.5px;font-weight:700;letter-spacing:-0.2px;">' + t + '</span>',
+      '    <span style="font-size:9.5px;font-weight:800;background:linear-gradient(135deg,#FF5722,#E11D48);color:#FFF;padding:2px 7px;border-radius:9999px;text-transform:uppercase;">Coming Soon</span>',
+      '  </div>',
+      '  <div style="color:#9CA3AF;font-size:11.5px;line-height:1.4;margin-top:2px;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">' + m + '</div>',
+      '</div>',
+      '<button style="flex-shrink:0;width:24px;height:24px;border:none;background:rgba(255,255,255,0.08);color:#9CA3AF;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;cursor:pointer;">&times;</button>'
     ].join("");
 
-    var closeBtn = modal.querySelector("#__im_btn_close_loading_soon");
-    if (closeBtn) {
-      closeBtn.onclick = function(e) {
-        e.stopPropagation();
-        modal.style.animation = "imSmoothSwagExit 0.25s forwards";
-        setTimeout(function() { if (modal.parentNode) modal.parentNode.removeChild(modal); }, 260);
-      };
-    }
-    modal.onclick = function() {
-      modal.style.animation = "imSmoothSwagExit 0.25s forwards";
-      setTimeout(function() { if (modal.parentNode) modal.parentNode.removeChild(modal); }, 260);
+    var dismiss = function() {
+      badge.style.animation = "imBadgeSlideUp 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards";
+      setTimeout(function() { if (badge.parentNode) badge.parentNode.removeChild(badge); }, 310);
     };
 
-    (document.body || document.documentElement).appendChild(modal);
+    badge.onclick = dismiss;
+    var closeBtn = badge.querySelector("button");
+    if (closeBtn) closeBtn.onclick = function(e) { e.stopPropagation(); dismiss(); };
+
+    // Auto dismiss after 3.6s
+    setTimeout(function() {
+      if (badge.parentNode) dismiss();
+    }, 3600);
+
+    // Subtle tactile buzz
+    try { if (navigator.vibrate) navigator.vibrate(25); } catch(e){}
+
+    (document.body || document.documentElement).appendChild(badge);
+  };
+  window.__im_show_create_loading_soon = function() {
+    window.__im_show_smooth_badge("InstaMusic Studio", "AI stems, remixing & original song creation tools are dropping soon! 📛", "📛");
   };
 
-  // Intercept click on any Create navigation or button
+  // Intercept click on Create navigation or AI Mood Mix card
   document.addEventListener("click", function(e) {
     var target = e.target;
     while (target && target !== document.body) {
-      if (target.getAttribute && (target.getAttribute("href") === "/create" || target.getAttribute("to") === "/create")) {
-        e.preventDefault();
-        e.stopPropagation();
-        window.__im_show_create_loading_soon();
-        return;
-      }
-      var text = (target.textContent || "").trim().toLowerCase();
-      if ((target.tagName === "BUTTON" || target.tagName === "A") && (text === "create" || text === "create playlist" || text === "create a moment")) {
-        if (target.getAttribute("id") !== "__im_btn_close_loading_soon") {
+      if (target.getAttribute) {
+        var href = target.getAttribute("href") || target.getAttribute("to");
+        if (href === "/create") {
           e.preventDefault();
           e.stopPropagation();
           window.__im_show_create_loading_soon();
           return;
         }
       }
+      var text = (target.textContent || "").trim().toLowerCase();
+      if ((target.tagName === "BUTTON" || target.tagName === "A" || target.hasAttribute("role")) &&
+          (text === "create" || text === "create playlist" || text === "create a moment" || text === "create music")) {
+        e.preventDefault();
+        e.stopPropagation();
+        window.__im_show_create_loading_soon();
+        return;
+      }
+      if (text.indexOf("ai mood mix") !== -1 || text.indexOf("mood mix") !== -1) {
+        if (target.closest && (target.closest("button") || target.closest("a") || target.closest("[role='button']"))) {
+          e.preventDefault();
+          e.stopPropagation();
+          window.__im_show_smooth_badge("AI Mood Mix", "Personalized AI Mood Playlists tailored to your vibe are coming in the next release! 📛", "📛");
+          return;
+        }
+      }
       target = target.parentNode;
     }
   }, true);
+
+  // Equalizer DSP Web Audio Engine
+  var __im_audioCtx = null;
+  var __im_bassFilter = null;
+  var __im_vocalFilter = null;
+  var __im_trebleFilter = null;
+  var __im_eqConnected = new WeakSet();
+
+  function __im_setupEqualizer(audioEl) {
+    try {
+      if (!audioEl || __im_eqConnected.has(audioEl)) return;
+      var AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext) return;
+      if (!__im_audioCtx) {
+        __im_audioCtx = new AudioContext();
+      }
+      if (__im_audioCtx.state === "suspended") {
+        __im_audioCtx.resume();
+      }
+
+      var source = __im_audioCtx.createMediaElementSource(audioEl);
+      if (!__im_bassFilter) {
+        __im_bassFilter = __im_audioCtx.createBiquadFilter();
+        __im_bassFilter.type = "lowshelf";
+        __im_bassFilter.frequency.value = 120; // Bass
+
+        __im_vocalFilter = __im_audioCtx.createBiquadFilter();
+        __im_vocalFilter.type = "peaking";
+        __im_vocalFilter.frequency.value = 2400; // Vocals
+        __im_vocalFilter.Q.value = 1.0;
+
+        __im_trebleFilter = __im_audioCtx.createBiquadFilter();
+        __im_trebleFilter.type = "highshelf";
+        __im_trebleFilter.frequency.value = 8000; // Treble
+
+        __im_bassFilter.connect(__im_vocalFilter);
+        __im_vocalFilter.connect(__im_trebleFilter);
+        __im_trebleFilter.connect(__im_audioCtx.destination);
+      }
+
+      source.connect(__im_bassFilter);
+      __im_eqConnected.add(audioEl);
+
+      var saved = localStorage.getItem("im_eq_settings");
+      if (saved) {
+        try {
+          var eq = JSON.parse(saved);
+          if (typeof eq.bass === "number") __im_bassFilter.gain.value = eq.bass;
+          if (typeof eq.vocal === "number") __im_vocalFilter.gain.value = eq.vocal;
+          if (typeof eq.treble === "number") __im_trebleFilter.gain.value = eq.treble;
+        } catch(e){}
+      }
+    } catch(err) {
+      console.warn("Equalizer notice:", err);
+    }
+  }
+
+  window.__im_setEqualizer = function(bass, vocal, treble) {
+    try {
+      var b = parseFloat(bass) || 0;
+      var v = parseFloat(vocal) || 0;
+      var t = parseFloat(treble) || 0;
+      if (__im_bassFilter) __im_bassFilter.gain.value = b;
+      if (__im_vocalFilter) __im_vocalFilter.gain.value = v;
+      if (__im_trebleFilter) __im_trebleFilter.gain.value = t;
+      localStorage.setItem("im_eq_settings", JSON.stringify({ bass: b, vocal: v, treble: t }));
+    } catch(e){}
+  };
+
+  // Hook equalizer to all audio instances
+  document.addEventListener("play", function(e) {
+    if (e.target && e.target.tagName === "AUDIO") {
+      __im_setupEqualizer(e.target);
+    }
+  }, true);
+
+  // Smooth badge keyframe animations injected
+  var styleEl = document.createElement("style");
+  styleEl.textContent = [
+    "@keyframes imBadgeSlideDown {",
+    "  0% { transform: translate(-50%, -100px) scale(0.92); opacity: 0; }",
+    "  60% { transform: translate(-50%, 6px) scale(1.02); opacity: 1; }",
+    "  100% { transform: translate(-50%, 0) scale(1); opacity: 1; }",
+    "}",
+    "@keyframes imBadgeSlideUp {",
+    "  0% { transform: translate(-50%, 0) scale(1); opacity: 1; }",
+    "  100% { transform: translate(-50%, -100px) scale(0.92); opacity: 0; }",
+    "}"
+  ].join("\n");
+  (document.head || document.documentElement).appendChild(styleEl);
 })();

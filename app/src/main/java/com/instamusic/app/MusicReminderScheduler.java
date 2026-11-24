@@ -59,6 +59,11 @@ public class MusicReminderScheduler {
 
     public static void schedulePeriodicReminders(Context context) {
         if (context == null) return;
+        SharedPreferences checkPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        if (!checkPrefs.getBoolean("reminders_enabled", true)) {
+            Log.d(TAG, "Reminders disabled by user preference; skipping scheduling.");
+            return;
+        }
         createNotificationChannel(context);
 
         try {
@@ -89,6 +94,25 @@ public class MusicReminderScheduler {
         }
     }
 
+        public static void cancelReminders(Context context) {
+        if (context == null) return;
+        try {
+            AlarmManager alarmManager = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
+            if (alarmManager == null) return;
+            Intent intent = new Intent(context, MusicReminderReceiver.class);
+            intent.setAction(ACTION_CHECK_REMINDER);
+            int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                flags |= PendingIntent.FLAG_IMMUTABLE;
+            }
+            PendingIntent pendingIntent = PendingIntent.getBroadcast(context, 1001, intent, flags);
+            alarmManager.cancel(pendingIntent);
+            Log.d(TAG, "Cancelled periodic music reminders alarm");
+        } catch (Exception e) {
+            Log.e(TAG, "Error cancelling reminders: " + e.getMessage());
+        }
+    }
+
     public static void triggerReminder(final Context context) {
         if (context == null) return;
 
@@ -99,6 +123,13 @@ public class MusicReminderScheduler {
             @Override
             public void run() {
                 try {
+                    // 1.5 Check if user turned off reminders in Settings
+                    SharedPreferences userPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+                    if (!userPrefs.getBoolean("reminders_enabled", true)) {
+                        Log.d(TAG, "Reminders disabled in settings; aborting trigger.");
+                        return;
+                    }
+
                     // 2. Check if music is currently playing
                     if (MusicPlaybackService.isMusicCurrentlyPlaying) {
                         Log.d(TAG, "Music is currently playing; skipping reminder.");

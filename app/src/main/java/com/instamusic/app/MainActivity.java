@@ -122,6 +122,31 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public void setRemindersEnabled(boolean enabled) {
+            try {
+                SharedPreferences prefs = getSharedPreferences(MusicReminderScheduler.PREFS_NAME, Context.MODE_PRIVATE);
+                prefs.edit().putBoolean("reminders_enabled", enabled).apply();
+                if (!enabled) {
+                    MusicReminderScheduler.cancelReminders(MainActivity.this);
+                } else {
+                    MusicReminderScheduler.schedulePeriodicReminders(MainActivity.this);
+                }
+            } catch (Exception e) {
+                android.util.Log.e("MainActivity", "Error in setRemindersEnabled: " + e.getMessage());
+            }
+        }
+
+        @JavascriptInterface
+        public boolean getRemindersEnabled() {
+            try {
+                SharedPreferences prefs = getSharedPreferences(MusicReminderScheduler.PREFS_NAME, Context.MODE_PRIVATE);
+                return prefs.getBoolean("reminders_enabled", true);
+            } catch (Exception e) {
+                return true;
+            }
+        }
+
+        @JavascriptInterface
         public void triggerTestReminder() {
             handler.post(() -> MusicReminderScheduler.triggerReminder(MainActivity.this));
         }
