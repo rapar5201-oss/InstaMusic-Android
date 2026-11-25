@@ -32,6 +32,8 @@ public class MusicReminderScheduler {
     public static final String KEY_LAST_REMINDER_TIME = "last_reminder_time";
     public static final String KEY_LAST_CATEGORY_INDEX = "last_category_index";
     public static final int NOTIFICATION_ID = 202;
+    public static final String KEY_REMINDERS_ENABLED = "reminders_enabled";
+    public static final String KEY_REMINDER_INTERVAL_MIN = "reminder_interval_min";
 
     // Interval: 30 minutes
     public static final long REMINDER_INTERVAL_MS = 30 * 60 * 1000L;
