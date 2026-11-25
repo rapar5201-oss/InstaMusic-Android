@@ -80,7 +80,9 @@ public class MusicReminderScheduler {
 
             PendingIntent pendingIntent = PendingIntent.getBroadcast(context, 1001, intent, flags);
 
-            long triggerAtMillis = System.currentTimeMillis() + REMINDER_INTERVAL_MS;
+            long intervalMin = checkPrefs.getLong(KEY_REMINDER_INTERVAL_MIN, 30L);
+            long intervalMs = Math.max(10L, intervalMin) * 60 * 1000L;
+            long triggerAtMillis = System.currentTimeMillis() + intervalMs;
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent);
@@ -94,7 +96,16 @@ public class MusicReminderScheduler {
         }
     }
 
-        public static void cancelReminders(Context context) {
+        public static void setReminderIntervalMinutes(Context context, long minutes) {
+        if (context == null) return;
+        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        prefs.edit().putLong(KEY_REMINDER_INTERVAL_MIN, minutes).apply();
+        if (prefs.getBoolean(KEY_REMINDERS_ENABLED, true)) {
+            schedulePeriodicReminders(context);
+        }
+    }
+
+    public static void cancelReminders(Context context) {
         if (context == null) return;
         try {
             AlarmManager alarmManager = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);

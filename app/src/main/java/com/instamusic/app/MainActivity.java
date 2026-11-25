@@ -137,6 +137,25 @@ public class MainActivity extends Activity {
             }
         }
 
+                @JavascriptInterface
+        public void setReminderInterval(String intervalStr) {
+            handler.post(() -> {
+                try {
+                    long minutes = 30;
+                    if (intervalStr != null) {
+                        String s = intervalStr.toLowerCase();
+                        if (s.contains("10")) minutes = 10;
+                        else if (s.contains("30")) minutes = 30;
+                        else if (s.contains("1 hour") || s.contains("60")) minutes = 60;
+                        else if (s.contains("off")) {
+                            setRemindersEnabled(false);
+                            return;
+                        }
+                    }
+                    MusicReminderScheduler.setReminderIntervalMinutes(MainActivity.this, minutes);
+                } catch (Exception ignored) {}
+            });
+        }
         @JavascriptInterface
         public boolean getRemindersEnabled() {
             try {
@@ -383,8 +402,9 @@ public class MainActivity extends Activity {
         s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
         s.setAllowFileAccess(true);
         s.setAllowContentAccess(true);
-        s.setUseWideViewPort(true);
-        s.setLoadWithOverviewMode(true);
+        s.setUseWideViewPort(false);
+        s.setLoadWithOverviewMode(false);
+        s.setTextZoom(100);
         s.setSupportZoom(false);
         s.setBuiltInZoomControls(false);
         s.setCacheMode(WebSettings.LOAD_DEFAULT);

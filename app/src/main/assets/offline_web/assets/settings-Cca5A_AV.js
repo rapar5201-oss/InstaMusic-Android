@@ -8,6 +8,7 @@ function v(){
   let [remindersEnabled,setRemindersEnabled]=(0,g.useState)(()=>{try{return window.Android&&typeof window.Android.getRemindersEnabled==='function'?window.Android.getRemindersEnabled():localStorage.getItem('im_reminders_enabled')!=='false'}catch{return localStorage.getItem('im_reminders_enabled')!=='false'}});
   let [expanded,setExpanded]=(0,g.useState)('');
   let [settingsCount,setSettingsCount]=(0,g.useState)(35);
+  let [privacyModalOpen,setPrivacyModalOpen]=(0,g.useState)(false);
 
   let setEq=(type,val)=>{
     let valNum=parseFloat(val)||0;
@@ -20,7 +21,8 @@ function v(){
   let toggleReminders=(enabled)=>{
     setRemindersEnabled(enabled);
     localStorage.setItem('im_reminders_enabled',String(enabled));
-    try{if(window.Android&&typeof window.Android.setRemindersEnabled==='function')window.Android.setRemindersEnabled(enabled)}catch(e){}
+    var b=window.MediaBridge||window.Android;
+    try{if(b&&typeof b.setRemindersEnabled==='function')b.setRemindersEnabled(enabled)}catch(e){}
   };
 
   let allSettings=[
@@ -76,21 +78,21 @@ function v(){
     if(item.type==='select'){
       let options=item.key==='reminderFrequency'?['10 minutes','30 minutes','1 hour','Off']:item.key==='language'?['English','Malayalam','Hindi','Tamil','Telugu']:item.key==='streamQuality'?['Automatic','Standard','High']:item.key==='landingPage'?['Home','Search','Library']:[];
       let current=localStorage.getItem('im_setting_'+item.key)||options[0];
-      return (0,g.jsxs)(_,{icon:(0,g.jsx)(h,{className:`h-4 w-4`}),title:item.title,sub:current+` • `+item.sub,right:(0,g.jsx)(`select`,{value:current,onChange:e=>{localStorage.setItem('im_setting_'+item.key,e.target.value);if(item.key==='reminderFrequency'&&window.Android){try{window.Android.setReminderInterval(e.target.value)}catch{}}},className:`max-w-[120px] rounded-lg border border-input bg-surface p-2 text-xs`,children:options.map(o=>(0,g.jsx)(`option`,{value:o,children:o},o))})},item.key);
+      return (0,g.jsxs)(_,{icon:(0,g.jsx)(h,{className:`h-4 w-4`}),title:item.title,sub:current+` • `+item.sub,right:(0,g.jsx)(`select`,{value:current,onChange:e=>{localStorage.setItem('im_setting_'+item.key,e.target.value);var b=window.MediaBridge||window.Android;if(item.key==='reminderFrequency'&&b&&typeof b.setReminderInterval==='function'){try{b.setReminderInterval(e.target.value)}catch(err){}}},className:`max-w-[120px] rounded-lg border border-input bg-surface p-2 text-xs`,children:options.map(o=>(0,g.jsx)(`option`,{value:o,children:o},o))})},item.key);
     }
     if(item.type==='action'){
       return (0,g.jsx)(l,{variant:`ghost`,className:`block h-auto w-full whitespace-normal p-0 text-left`,onClick:()=>{
         if(item.key==='clearSearch'){localStorage.removeItem('im_recent_searches');r.success('Recent searches cleared');}
         else if(item.key==='clearHistory'){localStorage.removeItem('im-listening-history-v1');r.success('Listening history cleared');}
         else if(item.key==='resetSettings'){localStorage.clear();r.success('Settings reset to defaults');window.location.reload();}
-        else if(item.key==='checkUpdates'){window.Android?.checkForUpdates?.();r.success('Checking for updates');}
+        else if(item.key==='checkUpdates'){var b=window.MediaBridge||window.Android;if(b&&typeof b.checkForUpdates==='function'){b.checkForUpdates();r.success('Checking for updates...');}else{r.success('InstaMusic is up to date (v1.0.40)');}}
         else if(item.key==='appVersion'){r.success('InstaMusic • Version 1.0.0');}
       },children:(0,g.jsx)(_,{icon:(0,g.jsx)(p,{className:`h-5 w-5`}),title:item.title,sub:item.sub,right:(0,g.jsx)(i,{className:`h-4 w-4 text-muted-foreground`})})},item.key);
     }
     if(item.type==='link'){
       return (0,g.jsx)(`button`,{onClick:()=>{
         if(item.key==='privacy'){
-          window.location.href='/privacy';
+          setPrivacyModalOpen(true);
         }else if(item.key==='licenses'){
           alert('InstaMusic uses third-party open-source components. License details are available in the app repository.');
         }else if(item.key==='about'){

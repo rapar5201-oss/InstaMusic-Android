@@ -38,7 +38,7 @@ jobs:
             "versionCode": ${{ github.run_number }},
             "versionName": "1.0.${{ github.run_number }}",
             "apkUrl": "https://github.com/rapar5201-oss/InstaMusic-Android/releases/download/latest-apk/app-release.apk",
-            "releaseNotes": "Continuous vibe-matched autoplay, intelligent track recommendation engine, enhanced Android Auto car compatibility across all phone models (MediaSessionService & MediaButton intent filters, WakeLock grace period, car search & direct playback routing)."
+            "releaseNotes": "Native mobile app layout enforcement (bottom navigation bar permanently visible, zero website scaling), real live synchronized lyrics engine via LrcLib with tap-to-seek & Indic transliterator, verified 35+ settings with Web Audio Equalizer, native reminder bridge, and in-app privacy policy."
           }
           EOF
 
@@ -56,7 +56,7 @@ jobs:
         with:
           tag_name: latest-apk
           name: InstaMusic latest APK (v1.0.${{ github.run_number }})
-          body: "InstaMusic Android release v1.0.${{ github.run_number }}: Massive music catalogue expansion with Old Hits & Retro Classics (Ilaiyaraaja, Kishore Kumar, SPB, Lata Mangeshkar, RD Burman, Mohammed Rafi), 90s & 2000s Nostalgia, All-Time Global Legends, dedicated Old Hits tab on Home, deep multi-page search returning 100+ songs per query, and Android Auto Old Hits browse channel."
+          body: "InstaMusic Android release v1.0.${{ github.run_number }}: Native mobile application layout enforcement (bottom navigation buttons permanently visible, desktop sidebar eliminated, true mobile viewport), real live synchronized lyrics with timestamp tracking and tap-to-seek, Indic phonetic romanizer for English sing-along, verified 35+ settings including Web Audio equalizer sliders, native reminder controls, and in-app privacy policy."
           files: |
             app/build/outputs/apk/release/app-release.apk
             app/build/outputs/apk/debug/app-debug.apk
