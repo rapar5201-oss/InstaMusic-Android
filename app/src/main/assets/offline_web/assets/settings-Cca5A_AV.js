@@ -1,14 +1,14 @@
-import{Ct as e,Dt as t,It as n,Tt as r,Z as i,et as a,n as o,q as s,rt as c,y as l}from"./music-BLVe8YTA.js";import{t as u}from"./sliders-horizontal-CrysWpKz.js";import{s as d}from"./index-BU8D3Ji9.js";import{t as f}from"./switch-Bsly0rYV.js";
-var p=a(`refresh-cw`,[[`path`,{d:`M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8`,key:`v9h5vc`}],[`path`,{d:`M21 3v5h-5`,key:`1q7to0`}],[`path`,{d:`M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16`,key:`3uifl3`}],[`path`,{d:`M8 16H3v5`,key:`1cv678`}]]),m=a(`vibrate`,[[`path`,{d:`m2 8 2 2-2 2 2 2-2 2`,key:`sv1b1`}],[`path`,{d:`m22 8-2 2 2 2-2 2`,key:`101i4y`}],[`rect`,{width:`8`,height:`14`,x:`8`,y:`5`,rx:`1`,key:`1oyrl4`}]]),h=a(`volume-2`,[[`path`,{d:`M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z`,key:`uqj9uw`}],[`path`,{d:`M16 9a5 5 0 0 1 0 6`,key:`1q6k2b`}],[`path`,{d:`M19.364 18.364a9 9 0 0 0 0-12.728`,key:`ijwkga`}]]),g=n();function _({icon:e,title:t,sub:n,right:r}){return(0,g.jsxs)(`div`,{className:`grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3.5`,children:[(0,g.jsx)(`span`,{className:`grid h-9 w-9 place-items-center rounded-xl bg-surface-2 text-brand-blue`,children:e}),(0,g.jsxs)(`div`,{className:`min-w-0`,children:[(0,g.jsx)(`p`,{className:`text-sm font-semibold`,children:t}),n&&(0,g.jsx)(`p`,{className:`text-xs text-muted-foreground`,children:n})]}),r]})}
+import{n as _e}from"./rolldown-runtime-CbXtAM7H.js";import{Ct as e,Dt as t,It as n,Tt as r,Z as i,et as a,n as o,q as s,rt as c,y as l,ln as _ln}from"./music-BLVe8YTA.js";import{t as u}from"./sliders-horizontal-CrysWpKz.js";import{s as d}from"./index-BU8D3Ji9.js";import{t as f}from"./switch-Bsly0rYV.js";
+var p=a(`refresh-cw`,[[`path`,{d:`M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8`,key:`v9h5vc`}],[`path`,{d:`M21 3v5h-5`,key:`1q7to0`}],[`path`,{d:`M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16`,key:`3uifl3`}],[`path`,{d:`M8 16H3v5`,key:`1cv678`}]]),m=a(`vibrate`,[[`path`,{d:`m2 8 2 2-2 2 2 2-2 2`,key:`sv1b1`}],[`path`,{d:`m22 8-2 2 2 2-2 2`,key:`101i4y`}],[`rect`,{width:`8`,height:`14`,x:`8`,y:`5`,rx:`1`,key:`1oyrl4`}]]),h=a(`volume-2`,[[`path`,{d:`M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z`,key:`uqj9uw`}],[`path`,{d:`M16 9a5 5 0 0 1 0 6`,key:`1q6k2b`}],[`path`,{d:`M19.364 18.364a9 9 0 0 0 0-12.728`,key:`ijwkga`}]]),g=n();var _k=_e(_ln());function _({icon:e,title:t,sub:n,right:r}){return(0,g.jsxs)(`div`,{className:`grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3.5`,children:[(0,g.jsx)(`span`,{className:`grid h-9 w-9 place-items-center rounded-xl bg-surface-2 text-brand-blue`,children:e}),(0,g.jsxs)(`div`,{className:`min-w-0`,children:[(0,g.jsx)(`p`,{className:`text-sm font-semibold`,children:t}),n&&(0,g.jsx)(`p`,{className:`text-xs text-muted-foreground`,children:n})]}),r]})}
 function v(){
   let n=c(),a=d(),v=n.settings,y=(t,r)=>{n.set(`settings`,{...v,[t]:r}),r&&e(!0,{sound:t===`sounds`,haptic:t===`haptics`})};
-  let [bass,setBass]=(0,g.useState)(()=>parseFloat(localStorage.getItem('im_eq_bass')||'0'));
-  let [vocal,setVocal]=(0,g.useState)(()=>parseFloat(localStorage.getItem('im_eq_vocal')||'0'));
-  let [treble,setTreble]=(0,g.useState)(()=>parseFloat(localStorage.getItem('im_eq_treble')||'0'));
-  let [remindersEnabled,setRemindersEnabled]=(0,g.useState)(()=>{try{return window.Android&&typeof window.Android.getRemindersEnabled==='function'?window.Android.getRemindersEnabled():localStorage.getItem('im_reminders_enabled')!=='false'}catch{return localStorage.getItem('im_reminders_enabled')!=='false'}});
-  let [expanded,setExpanded]=(0,g.useState)('');
-  let [settingsCount,setSettingsCount]=(0,g.useState)(35);
-  let [privacyModalOpen,setPrivacyModalOpen]=(0,g.useState)(false);
+  let [bass,setBass]=(0,_k.useState)(()=>parseFloat(localStorage.getItem('im_eq_bass')||'0'));
+  let [vocal,setVocal]=(0,_k.useState)(()=>parseFloat(localStorage.getItem('im_eq_vocal')||'0'));
+  let [treble,setTreble]=(0,_k.useState)(()=>parseFloat(localStorage.getItem('im_eq_treble')||'0'));
+  let [remindersEnabled,setRemindersEnabled]=(0,_k.useState)(()=>{try{return window.Android&&typeof window.Android.getRemindersEnabled==='function'?window.Android.getRemindersEnabled():localStorage.getItem('im_reminders_enabled')!=='false'}catch{return localStorage.getItem('im_reminders_enabled')!=='false'}});
+  let [expanded,setExpanded]=(0,_k.useState)('');
+  let [settingsCount,setSettingsCount]=(0,_k.useState)(35);
+  let [privacyModalOpen,setPrivacyModalOpen]=(0,_k.useState)(false);
 
   let setEq=(type,val)=>{
     let valNum=parseFloat(val)||0;
@@ -96,8 +96,7 @@ function v(){
         }else if(item.key==='licenses'){
           alert('InstaMusic uses third-party open-source components. License details are available in the app repository.');
         }else if(item.key==='about'){
-          alert('InstaMusic — your music, your mood.
-Support: support@instamusic.app');
+          alert('InstaMusic — your music, your mood.\nSupport: support@instamusic.app');
         }
       },className:`block w-full text-left hover:bg-accent`,children:(0,g.jsx)(_,{icon:(0,g.jsx)(u,{className:`h-5 w-5`}),title:item.title,sub:item.sub,right:(0,g.jsx)(i,{className:`h-4 w-4 text-muted-foreground`})})},item.key);
     }

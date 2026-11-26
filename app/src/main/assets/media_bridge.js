@@ -1,16 +1,4 @@
 (function() {
-  // Bridge compatibility alias
-  try {
-    if (typeof window.MediaBridge !== 'undefined') {
-      window.Android = window.MediaBridge;
-    } else {
-      Object.defineProperty(window, 'Android', {
-        get: function() { return window.MediaBridge || null; },
-        set: function(v) { window.MediaBridge = v; },
-        configurable: true
-      });
-    }
-  } catch(e) {}
   // Automatic proxy rewriter for broken JioSaavn endpoints
   try {
     var _origFetch = window.fetch;
@@ -156,27 +144,6 @@
       '  display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important;',
       '  transform: scale(0) !important; width: 0 !important; height: 0 !important; overflow: hidden !important;',
       '}',
-      '/* Mobile app layout enforcement */',
-      'aside.sticky, aside.lg\\:flex, aside[role="complementary"]:not(#lovable-badge), .lg\\:flex {',
-      '  display: none !important;',
-      '}',
-      '.lg\\:hidden, div.lg\\:hidden {',
-      '  display: block !important;',
-      '}',
-      'nav[aria-label="Main"] {',
-      '  display: grid !important;',
-      '  grid-template-columns: repeat(5, minmax(0, 1fr)) !important;',
-      '  visibility: visible !important;',
-      '  opacity: 1 !important;',
-      '  pointer-events: auto !important;',
-      '  position: relative !important;',
-      '}',
-      '.lg\\:left-60 {',
-      '  left: 0 !important;',
-      '}',
-      '.lg\\:pb-28 {',
-      '  padding-bottom: 7rem !important;',
-      '}',
       '@keyframes imSmoothSwagEntrance {',
       '  0% { opacity: 0; transform: translate(-50%, -36px) scale(0.88); filter: blur(10px); }',
       '  62% { transform: translate(-50%, 4px) scale(1.02); filter: blur(0px); }',
@@ -206,20 +173,20 @@
       '  0% { transform: scale(0.9); opacity: 0.35; }',
       '  50% { transform: scale(1.7); opacity: 0; }',
       '  100% { transform: scale(0.9); opacity: 0; }',
-      '}',
+      '},',
       '@keyframes skeleton-shimmer {',
       '  0% { background-position: 200% 0; }',
       '  100% { background-position: -200% 0; }',
-      '}',
+      '},',
       '.skeleton-shimmer, .skeleton-box, [data-skeleton="true"], .animate-pulse.bg-surface, .animate-pulse.rounded-2xl, .animate-pulse.rounded-xl, .animate-pulse.rounded-lg, .animate-pulse.rounded-md, .animate-pulse.rounded-full {',
       '  background: linear-gradient(90deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.05) 25%, rgba(255, 255, 255, 0.16) 50%, rgba(255, 255, 255, 0.05) 75%, rgba(255, 255, 255, 0.05) 100%) !important;',
       '  background-size: 200% 100% !important;',
       '  animation: skeleton-shimmer 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite !important;',
-      '}',
+      '},',
       'html:not(.dark) .skeleton-shimmer, html:not(.dark) .skeleton-box, html:not(.dark) [data-skeleton="true"], html:not(.dark) .animate-pulse.bg-surface, html:not(.dark) .animate-pulse.rounded-2xl, html:not(.dark) .animate-pulse.rounded-xl, html:not(.dark) .animate-pulse.rounded-lg, html:not(.dark) .animate-pulse.rounded-md, html:not(.dark) .animate-pulse.rounded-full {',
       '  background: linear-gradient(90deg, rgba(0, 0, 0, 0.06) 0%, rgba(0, 0, 0, 0.06) 25%, rgba(0, 0, 0, 0.15) 50%, rgba(0, 0, 0, 0.06) 75%, rgba(0, 0, 0, 0.06) 100%) !important;',
       '  background-size: 200% 100% !important;',
-      '}',
+      '},',
       '@media (prefers-reduced-motion: reduce) {',
       '  .skeleton-shimmer, .skeleton-box, [data-skeleton="true"], .animate-pulse.bg-surface, .animate-pulse.rounded-2xl, .animate-pulse.rounded-xl, .animate-pulse.rounded-lg, .animate-pulse.rounded-md, .animate-pulse.rounded-full {',
       '    animation: none !important;',
@@ -375,33 +342,9 @@
         ].join('');
 
         onlineDismissTimer = setTimeout(function() {
-  // Bridge compatibility alias
-  try {
-    if (typeof window.MediaBridge !== 'undefined') {
-      window.Android = window.MediaBridge;
-    } else {
-      Object.defineProperty(window, 'Android', {
-        get: function() { return window.MediaBridge || null; },
-        set: function(v) { window.MediaBridge = v; },
-        configurable: true
-      });
-    }
-  } catch(e) {}
           if (pill && pill.parentNode) {
             pill.style.animation = 'imSmoothSwagExit 0.38s cubic-bezier(0.16,1,0.3,1) forwards';
             setTimeout(function() {
-  // Bridge compatibility alias
-  try {
-    if (typeof window.MediaBridge !== 'undefined') {
-      window.Android = window.MediaBridge;
-    } else {
-      Object.defineProperty(window, 'Android', {
-        get: function() { return window.MediaBridge || null; },
-        set: function(v) { window.MediaBridge = v; },
-        configurable: true
-      });
-    }
-  } catch(e) {}
               if (pill && pill.parentNode) pill.parentNode.removeChild(pill);
             }, 390);
           }
@@ -506,18 +449,6 @@
       // Long press detection for deletion/dismissal
       if (longPressTimer) clearTimeout(longPressTimer);
       longPressTimer = setTimeout(function() {
-  // Bridge compatibility alias
-  try {
-    if (typeof window.MediaBridge !== 'undefined') {
-      window.Android = window.MediaBridge;
-    } else {
-      Object.defineProperty(window, 'Android', {
-        get: function() { return window.MediaBridge || null; },
-        set: function(v) { window.MediaBridge = v; },
-        configurable: true
-      });
-    }
-  } catch(e) {}
         if (!hasMoved) {
           triggerChipDismiss(chip);
         }
@@ -643,18 +574,6 @@
     } catch(e) {}
 
     setTimeout(function() {
-  // Bridge compatibility alias
-  try {
-    if (typeof window.MediaBridge !== 'undefined') {
-      window.Android = window.MediaBridge;
-    } else {
-      Object.defineProperty(window, 'Android', {
-        get: function() { return window.MediaBridge || null; },
-        set: function(v) { window.MediaBridge = v; },
-        configurable: true
-      });
-    }
-  } catch(e) {}
       if (chip && chip.parentNode) chip.parentNode.removeChild(chip);
     }, 390);
   }
@@ -662,18 +581,6 @@
   function resetChipIdleTimer() {
     if (chipIdleTimer) clearTimeout(chipIdleTimer);
     chipIdleTimer = setTimeout(function() {
-  // Bridge compatibility alias
-  try {
-    if (typeof window.MediaBridge !== 'undefined') {
-      window.Android = window.MediaBridge;
-    } else {
-      Object.defineProperty(window, 'Android', {
-        get: function() { return window.MediaBridge || null; },
-        set: function(v) { window.MediaBridge = v; },
-        configurable: true
-      });
-    }
-  } catch(e) {}
       // Auto-compact after 7s of quiet stability to avoid disturbing the user
       chipIsCompact = true;
       var chip = document.getElementById('__im_network_quality_chip');
@@ -704,18 +611,6 @@
       chip.style.animation = 'imQualityDrop 0.65s cubic-bezier(0.16,1,0.3,1)';
       chip.style.borderColor = 'rgba(245,158,11,0.45)';
       setTimeout(function() {
-  // Bridge compatibility alias
-  try {
-    if (typeof window.MediaBridge !== 'undefined') {
-      window.Android = window.MediaBridge;
-    } else {
-      Object.defineProperty(window, 'Android', {
-        get: function() { return window.MediaBridge || null; },
-        set: function(v) { window.MediaBridge = v; },
-        configurable: true
-      });
-    }
-  } catch(e) {}
         if (chip) chip.style.borderColor = 'rgba(255,255,255,0.14)';
       }, 1200);
     }
@@ -837,18 +732,6 @@
   function scheduleSync() {
     if (syncTimer) return;
     syncTimer = window.setTimeout(function() {
-  // Bridge compatibility alias
-  try {
-    if (typeof window.MediaBridge !== 'undefined') {
-      window.Android = window.MediaBridge;
-    } else {
-      Object.defineProperty(window, 'Android', {
-        get: function() { return window.MediaBridge || null; },
-        set: function(v) { window.MediaBridge = v; },
-        configurable: true
-      });
-    }
-  } catch(e) {}
       syncTimer = 0;
       try { sync(); } catch(e) {}
     }, 80);
@@ -878,18 +761,6 @@
         }
         if (ev === 'ended') {
           setTimeout(function() {
-  // Bridge compatibility alias
-  try {
-    if (typeof window.MediaBridge !== 'undefined') {
-      window.Android = window.MediaBridge;
-    } else {
-      Object.defineProperty(window, 'Android', {
-        get: function() { return window.MediaBridge || null; },
-        set: function(v) { window.MediaBridge = v; },
-        configurable: true
-      });
-    }
-  } catch(e) {}
             var active = findPlayingAudio();
             if (!active || active.paused || active.ended) {
               if (typeof window.__triggerMediaAction === 'function') {
@@ -1215,19 +1086,7 @@
     }
   }
 
-  var observer = new MutationObserver(function() {
-  // Bridge compatibility alias
-  try {
-    if (typeof window.MediaBridge !== 'undefined') {
-      window.Android = window.MediaBridge;
-    } else {
-      Object.defineProperty(window, 'Android', {
-        get: function() { return window.MediaBridge || null; },
-        set: function(v) { window.MediaBridge = v; },
-        configurable: true
-      });
-    }
-  } catch(e) {} scheduleSync(); });
+  var observer = new MutationObserver(function() { scheduleSync(); });
   if (document.body) observer.observe(document.body, { childList: true, subtree: true, attributes: false });
   else document.addEventListener('DOMContentLoaded', function() {
     if (document.body) observer.observe(document.body, { childList: true, subtree: true, attributes: false });
@@ -1273,19 +1132,7 @@
 
     var dismiss = function() {
       badge.style.animation = "imBadgeSlideUp 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards";
-      setTimeout(function() {
-  // Bridge compatibility alias
-  try {
-    if (typeof window.MediaBridge !== 'undefined') {
-      window.Android = window.MediaBridge;
-    } else {
-      Object.defineProperty(window, 'Android', {
-        get: function() { return window.MediaBridge || null; },
-        set: function(v) { window.MediaBridge = v; },
-        configurable: true
-      });
-    }
-  } catch(e) {} if (badge.parentNode) badge.parentNode.removeChild(badge); }, 310);
+      setTimeout(function() { if (badge.parentNode) badge.parentNode.removeChild(badge); }, 310);
     };
 
     badge.onclick = dismiss;
@@ -1294,18 +1141,6 @@
 
     // Auto dismiss after 3.6s
     setTimeout(function() {
-  // Bridge compatibility alias
-  try {
-    if (typeof window.MediaBridge !== 'undefined') {
-      window.Android = window.MediaBridge;
-    } else {
-      Object.defineProperty(window, 'Android', {
-        get: function() { return window.MediaBridge || null; },
-        set: function(v) { window.MediaBridge = v; },
-        configurable: true
-      });
-    }
-  } catch(e) {}
       if (badge.parentNode) dismiss();
     }, 3600);
 
@@ -1394,12 +1229,6 @@
       __im_eqConnected.add(audioEl);
 
       var saved = localStorage.getItem("im_eq_settings");
-      var sb = localStorage.getItem("im_eq_bass");
-      var sv = localStorage.getItem("im_eq_vocal");
-      var st = localStorage.getItem("im_eq_treble");
-      if (sb !== null) __im_bassFilter.gain.value = parseFloat(sb) || 0;
-      if (sv !== null) __im_vocalFilter.gain.value = parseFloat(sv) || 0;
-      if (st !== null) __im_trebleFilter.gain.value = parseFloat(st) || 0;
       if (saved) {
         try {
           var eq = JSON.parse(saved);

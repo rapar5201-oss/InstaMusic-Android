@@ -67,3 +67,77 @@ html:not(.dark) .animate-pulse.rounded-full {
     background: rgba(255, 255, 255, 0.08) !important;
   }
 }
+
+
+/* InstaMusic Native Android App Layout */
+html, body {
+  overflow-x: hidden !important;
+  max-width: 100vw !important;
+  width: 100% !important;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+aside.w-60,
+aside.sticky,
+aside[class*="w-60"] {
+  display: none !important;
+  visibility: hidden !important;
+  width: 0 !important;
+  height: 0 !important;
+  pointer-events: none !important;
+  position: absolute !important;
+}
+
+.flex.min-h-screen {
+  display: block !important;
+  width: 100% !important;
+  max-width: 100vw !important;
+  overflow-x: hidden !important;
+}
+
+.max-w-3xl {
+  max-width: 100% !important;
+}
+
+.fixed.inset-x-0.bottom-0 {
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100% !important;
+  max-width: 100vw !important;
+  z-index: 50 !important;
+}
+
+.fixed.inset-x-0.bottom-0 > div,
+.fixed.inset-x-0.bottom-0 .lg\:hidden {
+  display: block !important;
+  visibility: visible !important;
+}
+
+nav[aria-label="Main"] {
+  display: grid !important;
+  grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  background-color: rgba(5, 8, 13, 0.95) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+main.flex-1 {
+  padding-bottom: 7rem !important;
+  overflow-x: hidden !important;
+  width: 100% !important;
+  max-width: 100vw !important;
+}
+
+.overflow-x-auto, [class*="overflow-x"] {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+.overflow-x-auto::-webkit-scrollbar {
+  display: none !important;
+}

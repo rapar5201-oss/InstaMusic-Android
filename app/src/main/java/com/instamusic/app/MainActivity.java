@@ -402,8 +402,8 @@ public class MainActivity extends Activity {
         s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
         s.setAllowFileAccess(true);
         s.setAllowContentAccess(true);
-        s.setUseWideViewPort(false);
-        s.setLoadWithOverviewMode(false);
+        s.setUseWideViewPort(true);
+        s.setLoadWithOverviewMode(true);
         s.setTextZoom(100);
         s.setSupportZoom(false);
         s.setBuiltInZoomControls(false);
@@ -415,6 +415,7 @@ public class MainActivity extends Activity {
         appView.setBackgroundColor(0xFF05080D);
 
         appView.addJavascriptInterface(new MediaBridge(), "MediaBridge");
+        appView.addJavascriptInterface(new MediaBridge(), "Android");
 
         appView.setWebViewClient(new WebViewClient() {
             @Override
