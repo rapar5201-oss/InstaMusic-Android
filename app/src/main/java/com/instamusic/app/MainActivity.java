@@ -184,13 +184,11 @@ public class MainActivity extends Activity {
                         sb.append(title.trim());
                     }
                     if (text != null && !text.trim().isEmpty() && !text.trim().equals(title != null ? title.trim() : "")) {
-                        if (sb.length() > 0) sb.append("
-");
+                        if (sb.length() > 0) sb.append("\n");
                         sb.append(text.trim());
                     }
                     if (url != null && !url.trim().isEmpty() && !sb.toString().contains(url.trim())) {
-                        if (sb.length() > 0) sb.append("
-");
+                        if (sb.length() > 0) sb.append("\n");
                         sb.append(url.trim());
                     }
                     sendIntent.putExtra(Intent.EXTRA_SUBJECT, title != null && !title.isEmpty() ? title : "InstaMusic");
