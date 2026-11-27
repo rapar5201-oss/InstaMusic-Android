@@ -38,7 +38,7 @@ jobs:
             "versionCode": ${{ github.run_number }},
             "versionName": "1.0.${{ github.run_number }}",
             "apkUrl": "https://github.com/rapar5201-oss/InstaMusic-Android/releases/download/latest-apk/app-release.apk",
-            "releaseNotes": "Native mobile app layout enforcement (bottom navigation bar permanently visible, zero website scaling), real live synchronized lyrics engine via LrcLib with tap-to-seek & Indic transliterator, verified 35+ settings with Web Audio Equalizer, native reminder bridge, and in-app privacy policy."
+            "releaseNotes": "Native system share sheet integration for songs, verified 36 interactive settings controls with active side-effects, real-time 3-band Web Audio Equalizer (Bass/Vocal/Treble), in-app Privacy Policy and Open-Source modal sheets, Home header settings shortcut, and native haptic vibration feedback."
           }
           EOF
 
@@ -56,7 +56,7 @@ jobs:
         with:
           tag_name: latest-apk
           name: InstaMusic latest APK (v1.0.${{ github.run_number }})
-          body: "InstaMusic Android release v1.0.${{ github.run_number }}: Native mobile application layout enforcement (bottom navigation buttons permanently visible, desktop sidebar eliminated, true mobile viewport), real live synchronized lyrics with timestamp tracking and tap-to-seek, Indic phonetic romanizer for English sing-along, verified 35+ settings including Web Audio equalizer sliders, native reminder controls, and in-app privacy policy."
+          body: "InstaMusic Android release v1.0.${{ github.run_number }}: Native Android share sheet integration for tracks, verified 36 functional settings controls with active side effects (themes, display toggles, accessibility, clearing search/history, cache reset), hardware-accelerated 3-band equalizer (Bass, Vocals, Treble), native reminder frequency bridge, in-app Privacy Policy and Open-Source licenses modals, Home header settings button, and haptic feedback."
           files: |
             app/build/outputs/apk/release/app-release.apk
             app/build/outputs/apk/debug/app-debug.apk

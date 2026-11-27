@@ -11,6 +11,8 @@ import android.graphics.Bitmap;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.Vibrator;
+import android.os.VibrationEffect;
 import android.os.Looper;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -171,6 +173,57 @@ public class MainActivity extends Activity {
             handler.post(() -> MusicReminderScheduler.triggerReminder(MainActivity.this));
         }
 
+        @JavascriptInterface
+        public void share(String title, String text, String url) {
+            handler.post(() -> {
+                try {
+                    Intent sendIntent = new Intent(Intent.ACTION_SEND);
+                    sendIntent.setType("text/plain");
+                    StringBuilder sb = new StringBuilder();
+                    if (title != null && !title.trim().isEmpty()) {
+                        sb.append(title.trim());
+                    }
+                    if (text != null && !text.trim().isEmpty() && !text.trim().equals(title != null ? title.trim() : "")) {
+                        if (sb.length() > 0) sb.append("
+");
+                        sb.append(text.trim());
+                    }
+                    if (url != null && !url.trim().isEmpty() && !sb.toString().contains(url.trim())) {
+                        if (sb.length() > 0) sb.append("
+");
+                        sb.append(url.trim());
+                    }
+                    sendIntent.putExtra(Intent.EXTRA_SUBJECT, title != null && !title.isEmpty() ? title : "InstaMusic");
+                    sendIntent.putExtra(Intent.EXTRA_TEXT, sb.toString());
+                    Intent chooser = Intent.createChooser(sendIntent, "Share music via");
+                    chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    startActivity(chooser);
+                } catch (Exception e) {
+                    android.util.Log.e("MainActivity", "Error in share: " + e.getMessage());
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void vibrate(long milliseconds) {
+            handler.post(() -> {
+                try {
+                    Vibrator v = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
+                    if (v != null && v.hasVibrator()) {
+                        long duration = milliseconds > 0 ? milliseconds : 25;
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            v.vibrate(VibrationEffect.createOneShot(duration, VibrationEffect.DEFAULT_AMPLITUDE));
+                        } else {
+                            v.vibrate(duration);
+                        }
+                    }
+                } catch (Exception e) {
+                    android.util.Log.w("MainActivity", "Error in vibrate: " + e.getMessage());
+                }
+            });
+        }
+
+        @JavascriptInterface
         public void showToast(String message) {
             handler.post(() -> Toast.makeText(MainActivity.this, message, Toast.LENGTH_SHORT).show());
         }

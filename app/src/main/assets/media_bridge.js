@@ -1275,4 +1275,91 @@
     "}"
   ].join("\n");
   (document.head || document.documentElement).appendChild(styleEl);
+
+  // Native Android & Web Share polyfill
+  try {
+    if (!navigator.share || (window.MediaBridge && window.MediaBridge.share) || (window.Android && window.Android.share)) {
+      navigator.share = async function(data) {
+        if (!data) return Promise.resolve();
+        var title = data.title || 'InstaMusic';
+        var text = data.text || '';
+        var url = data.url || '';
+        var b = window.MediaBridge || window.Android;
+        if (b && typeof b.share === 'function') {
+          b.share(title, text, url);
+          return Promise.resolve();
+        }
+        return Promise.reject(new Error('Share unavailable'));
+      };
+    }
+  } catch(e) {}
+
+  // Native Android Vibration polyfill
+  try {
+    var origVibrate = navigator.vibrate;
+    navigator.vibrate = function(pattern) {
+      var ms = 25;
+      if (typeof pattern === 'number') ms = pattern;
+      else if (Array.isArray(pattern) && pattern.length > 0) ms = pattern[0];
+      var b = window.MediaBridge || window.Android;
+      if (b && typeof b.vibrate === 'function') {
+        b.vibrate(ms);
+        return true;
+      }
+      if (origVibrate) {
+        try { return origVibrate.call(navigator, pattern); } catch(e){}
+      }
+      return false;
+    };
+  } catch(e) {}
+
+  // Automatically apply stored appearance and accessibility settings
+  function __im_applyStoredSettings() {
+    try {
+      var root = document.documentElement;
+      if (!root) return;
+      var dark = localStorage.getItem('im_setting_darkTheme');
+      if (dark === 'false') {
+        root.classList.remove('dark');
+        root.classList.add('light');
+      } else {
+        root.classList.add('dark');
+      }
+      if (localStorage.getItem('im_setting_reduceMotion') === 'true') {
+        root.classList.add('reduce-motion');
+      } else {
+        root.classList.remove('reduce-motion');
+      }
+      if (localStorage.getItem('im_setting_highContrast') === 'true') {
+        root.classList.add('high-contrast');
+      } else {
+        root.classList.remove('high-contrast');
+      }
+      if (localStorage.getItem('im_setting_largeText') === 'true') {
+        root.classList.add('large-text');
+      } else {
+        root.classList.remove('large-text');
+      }
+      if (localStorage.getItem('im_setting_showArtists') === 'false') {
+        root.classList.add('im-hide-artists');
+      } else {
+        root.classList.remove('im-hide-artists');
+      }
+      if (localStorage.getItem('im_setting_playCounts') === 'false') {
+        root.classList.add('im-hide-playcounts');
+      } else {
+        root.classList.remove('im-hide-playcounts');
+      }
+      if (localStorage.getItem('im_setting_animatedArtwork') === 'false') {
+        root.classList.add('im-disable-artwork-anim');
+      } else {
+        root.classList.remove('im-disable-artwork-anim');
+      }
+    } catch(e) {}
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', __im_applyStoredSettings);
+  } else {
+    __im_applyStoredSettings();
+  }
 })();
